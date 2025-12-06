@@ -7,9 +7,9 @@
 
 
 // Pin SD
-#define MOSI_SD 23
-#define MISO_SD 19
-#define SCK_SD  18
+#define MOSI_SD 14
+#define MISO_SD 13
+#define SCK_SD  4
 #define CS_SD   5
 
 AsyncWebServer server(80);
@@ -36,7 +36,7 @@ void setup(){
     Serial.println("Starting ESP32 Async SD server");
 
     SPI.begin(SCK_SD, MISO_SD, MOSI_SD, CS_SD);
-    if(!SD.begin(CS_SD, SPI,40000000)){
+    if(!SD.begin(CS_SD,SPI)){
         Serial.println("SD init failed. Check wiring and CS pin.");
     }else{
         Serial.println("SD initialized.");
