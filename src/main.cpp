@@ -5,11 +5,12 @@
 #include <ESPAsyncWebServer.h>
 #include <WiFi.h>
 
+
 // Pin SD
-#define MOSI_SD 15
-#define MISO_SD 2
-#define SCK_SD 14
-#define CS_SD 5
+#define MOSI_SD 23
+#define MISO_SD 19
+#define SCK_SD  18
+#define CS_SD   5
 
 AsyncWebServer server(80);
 
@@ -25,12 +26,17 @@ int old_hum = 0;
 int old_temp = 0;
 int old_vol = 0;
 
+void connectWiFi();
+bool serveFromSD(AsyncWebServerRequest *);
+void aggiornaDati();
+String contentType(const String &filename);
+
 void setup(){
     Serial.begin(9600);
     Serial.println("Starting ESP32 Async SD server");
 
-    SPI.begin(SCK_SD, MISO_SD, MOSI_SD);
-    if(!SD.begin(CS_SD, SPI)) {
+    SPI.begin(SCK_SD, MISO_SD, MOSI_SD, CS_SD);
+    if(!SD.begin(CS_SD, SPI,40000000)){
         Serial.println("SD init failed. Check wiring and CS pin.");
     }else{
         Serial.println("SD initialized.");
@@ -38,8 +44,14 @@ void setup(){
     connectWiFi();
     // Fornisce la pagina web
     server.onNotFound([](AsyncWebServerRequest *request){
-        if(!serveFromSD(request)){
-            request->send(404,"text/plain","File Not Found");
+        String path = "/web" + request->url();
+        if(path.endsWith("/")) path += "index.html"; 
+        if(SD.exists(path)){
+            AsyncWebServerResponse *response = request->beginResponse(SD, path, contentType(path));
+            response->addHeader("Cache-Control", "max-age=3600"); // cache per 1 ora
+            request->send(response);
+        } else {
+            request->send(404, "text/plain", "File Not Found");
         }
     });
     server.begin();
@@ -61,6 +73,7 @@ void loop(){
         }
     }
 }
+
 // Aiuta a caricare i file
 String contentType(const String &filename){
     if(filename.endsWith(".htm") || filename.endsWith(".html")){
@@ -86,16 +99,6 @@ String contentType(const String &filename){
     }
     return "text/plain";
 }
-
-// Serve file dalla SD
-bool serveFromSD(AsyncWebServerRequest *request){
-    File file = SD.open("/web/index.html", FILE_READ);
-    if (!file) return false;
-
-    request->send(SD, "/web/index.html", contentType("/web/index.html"));
-    return true;
-}
-
 // Scrive file sulla SD
 void writeFile(const char *path, const String &data) {
     // Cancello il file
@@ -107,7 +110,7 @@ void writeFile(const char *path, const String &data) {
     f.close();
 }
 
-void aggiornaDati() {
+void aggiornaDati(){
     hum = (hum + 1) % 101;
     temp = (temp + 1) % 101;
     String json = "{";
@@ -180,11 +183,12 @@ void connectWiFi(){
         Serial.print("IP: ");
         Serial.println(WiFi.localIP());
     }else{
+        // Riprovo con il wifi di default
         Serial.println("\nConnessione a " + ssid + " fallita!");
         Serial.println("Provo con il WiFi di default\n");
         WiFi.mode(WIFI_STA);
         WiFi.begin(dssid.c_str(), dpassword.c_str());
-        unsigned long start = millis();
+        start = millis();
         while (WiFi.status() != WL_CONNECTED && millis() - start < 10000) {
             delay(500);
             Serial.print(".");
