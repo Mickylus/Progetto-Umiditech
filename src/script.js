@@ -2,7 +2,7 @@ let REFRESH_RATE = 200; // valore di default in millisecondi
 
 async function caricaDati(){
 	try{
-		const r = await fetch("/dati.json");
+		const r = await fetch("dati.json");
 		const d = await r.json();
 
 		const H = document.getElementById("humidity");
@@ -56,7 +56,7 @@ async function salvaWifi(e){
 	const st = document.getElementById("saveStatus");
 	if(st) st.textContent = "Salvataggio...";
 	try{
-		const r = await fetch("/settings.json",{
+		const r = await fetch("settings.json",{
 			method:"POST",
 			headers:{"Content-Type":"application/json"},
 			body:JSON.stringify(settings)
@@ -119,7 +119,7 @@ async function salvaWifi(e){
 
     async function aggiornaDati(){
         try{
-            const resp = await fetch('/dati.json', { cache: 'no-store' });
+            const resp = await fetch('dati.json', { cache: 'no-store' });
             if(!resp.ok) return;
             const d = await resp.json();
 
