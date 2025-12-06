@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="UTF-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1"/>
+		<title>Web App Umiditech</title>
+		<link rel="icon" type="image/x-icon" href="favicon.ico">
+		<link rel="stylesheet" href="style.css">
+	</head>
+	<body>
+		<div id="menu">
+			<a href="index.html">Home</a>
+			<a href="settings.html">Impostazioni</a>
+			<a href="https://github.com/Mickylus/Arduino/tree/main/Umiditech" target="_blank">Documentazione</a>
+		</div>
+		<br>
+		<h1 class="titolo">Umiditech</h1>
+		<h2>Monitor Valori</h2>
+		<div id="val_list">
+			<div class="val_box">
+    			Umidità: <var id="humidity"></var>%<br>
+    			<canvas id="grafico_humidity"></canvas>
+			</div>
+			<div class="val_box">
+				Temperatura: <var id="temperature"></var>°<br>
+				<canvas id="grafico_temperature"></canvas>
+			</div>
+			<div class="val_box">
+				Volume: <var id="volume"></var>%<br>
+				<canvas id="grafico_volume"></canvas>
+			</div>
+		</div>
+		<script src="chart.js"></script>
+		<script src="carica_dati.js"></script>
+		<script src="grafico.js"></script>
+	</body>
+</html>

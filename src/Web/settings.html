@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="UTF-8">
+		<meta name="viewport" content="width=device-width,initial-scale=1">
+		<title>Impostazioni Web App</title>
+		<link rel="icon" type="image/x-icon" href="favicon.ico">
+		<link rel="stylesheet" href="style.css">
+	</head>
+	<body>
+		<div id="menu">
+			<a href="index.html">Home</a>
+			<a href="settings.html">Impostazioni</a>
+			<a href="https://github.com/Mickylus/Arduino/tree/main/Umiditech" target="_blank">Documentazione</a>
+		</div>
+		<br>
+		<h1 class="titolo">Impostazioni</h1>
+		<form id="settingsBox">
+			<h2>Rete Wifi</h2>
+			<div class="form-row">
+				<label for="ssid">Nome rete (SSID)</label>
+				<input type="text" id="ssid" name="ssid" class="form-input" placeholder="Nome WiFi">
+			</div>
+			<div class="form-row">
+				<label for="password">Password</label>
+				<input type="password" id="password" name="password" class="form-input" placeholder="Password">
+			</div>
+			<div>
+				<label for="setDefaultWifi">Imposta come default</label>
+				<input type="checkbox" id="setDefaultWifi" name="setDefaultWifi">
+			</div>
+			<hr>
+			<h2>Refresh</h2>
+			<div class="form-row">
+				<label for="fetch_rate">Frequenza</label>
+				<div style="display:inline-flex;align-items:center;gap:0.5rem;">
+					<input type="text" id="r_rate" name="r_rate" class="form-input" placeholder="1">
+					<span>s</span>
+				</div>
+			</div>
+			<hr>
+			<div id="but_cen" class="settings-actions">
+				<button type="submit" class="btn">Salva</button>
+				<span id="saveStatus" aria-live="polite"></span>
+			</div>
+		</form>
+		<script src="carica_dati.js"></script>
+	</body>
+</html>
