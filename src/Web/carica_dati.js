@@ -23,71 +23,67 @@ async function caricaDati(){
 }
 
 // ---- WIFI ----
-async function caricaWifi(){
+async function caricaImpostazioni(){
 	try{
-		const r = await fetch("wifi.json");
-		if(!r.ok) return;
+		const r = await fetch("settings.json");
 		const w = await r.json();
-		if(w.ssid) document.getElementById("ssid").value = w.ssid;
-		if(w.password) document.getElementById("password").value = w.password;
+		document.getElementById("ssid").value = w.ssid;
+		document.getElementById("password").value = w.password;
+		document.getElementById("r_rate").value =w.refresh_rate;
+		REFRESH_RATE=Number(w.refresh_rate)*1000;
 	}catch(_){}
 }
 
 async function salvaWifi(e){
-	if(e) e.preventDefault();
-
-	const payload = {
-		ssid: document.getElementById("ssid").value || "",
-		password: document.getElementById("password").value || ""
-	};
-
+	if(e){
+		e.preventDefault();
+	}
+	const ssid =  document.getElementById("ssid").value || "";
+	const password = document.getElementById("password").value || "";
+	const refresh_rate = document.getElementById("r_rate").value || "";
+	const cb = document.getElementById("setDefaultWifi");
+	
+	const r = await fetch("settings.json");
+	settings = await r.json();
+	
+	settings.ssid = ssid;
+    settings.password = password;
+    if(cb && cb.checked){
+        settings.d_ssid = ssid;
+        settings.d_password = password;
+    }
+	settings.refresh_rate = refresh_rate;
 	const st = document.getElementById("saveStatus");
 	if(st) st.textContent = "Salvataggio...";
-
 	try{
-		const r = await fetch("/wifi.json",{
+		const r = await fetch("/settings.json",{
 			method:"POST",
 			headers:{"Content-Type":"application/json"},
-			body:JSON.stringify(payload)
+			body:JSON.stringify(settings)
 		});
 		if(r.ok){
-			if(st) st.textContent = "Salvato sul dispositivo";
+			if(st){
+				st.textContent = "Salvato sul dispositivo";
+			}
 			return;
 		}
-	}catch(_){}
-
-	const blob = new Blob(
-		[JSON.stringify(payload,null,2)],
-		{type:"application/json"}
-	);
-	const url = URL.createObjectURL(blob);
-	const a = document.createElement("a");
-	a.href = url;
-	a.download = "wifi.json";
-	a.click();
-	URL.revokeObjectURL(url);
-
-	if(st) st.textContent = "Download creato (wifi.json)";
+	}catch(_){
+		const blob = new Blob([JSON.stringify(settings,null,2)], {type:"application/json"});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "settings.json";
+        a.click();
+        URL.revokeObjectURL(url);
+	}
 }
 
 document.addEventListener("DOMContentLoaded",()=>{
 	const form = document.getElementById("settingsBox");
 	if(form) form.addEventListener("submit", salvaWifi);
-	caricaWifi();
+	caricaImpostazioni();
 	aggiorna();
 });
-
-async function leggiRRate(){
-	try{
-		const rateFile = await fetch("settings.json");
-		const rateJson = await rateFile.json();
-		// Leggo e converto la refresh rate
-		REFRESH_RATE = Number(rateJson.refresh_rate);
-		REFRESH_RATE = REFRESH_RATE*1000;
-	}catch(e){
-		console.error("Errore nella lettura delle impostazioni:",e);
-	}
-}
 
 async function aggiorna(){
 	while(true){
