@@ -33,11 +33,19 @@
 			<h2>Refresh</h2>
 			<div class="form-row">
 				<label for="fetch_rate">Frequenza</label>
-				<div style="display:inline-flex;align-items:center;gap:0.5rem;">
+				<div class="small_input">
 					<input type="text" id="r_rate" name="r_rate" class="form-input" placeholder="1">
-					<span>s</span>
+					<span>secondi</span><span class="note">(consigliati: <span class="num">2</span>)</span>
 				</div>
 			</div>
+			<div class="form-row">
+				<label for="fetch_rate">Frequenza grafico</label>
+				<div class="small_input">
+					<input type="text" id="graph_rate" name="graph_rate" class="form-input" placeholder="1">
+					<span>minuti</span><span class="note">(consigliati: <span class="num">5</span>)</span>
+				</div>
+			</div>
+			<span class="note">Nota: Valori bassi possono contribuire a un'usura veloce della scheda SD</span>
 			<hr>
 			<div id="but_cen" class="settings-actions">
 				<button type="submit" class="btn">Salva</button>

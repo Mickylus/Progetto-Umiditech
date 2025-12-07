@@ -109,6 +109,50 @@ var{
 #but_cen{
 	text-align: center;
 }
+span.note{
+	color: #0000004f;
+	text-decoration: underline;
+	font-size: 1.1em;
+}
+span.num{
+	font-family: 'panton';
+	font-size: 0.8em;
+}
+span.note:hover{
+	color: #5986ac;
+	text-decoration: none;
+}
+#knobContainer {
+    position: relative;
+    width: 100px;
+    height: 100px;
+}
+.vol_box{
+	margin-top:0.5rem;
+	display: flex;
+	flex-direction: column;
+	align-content: center;
+	align-items: center;
+}
+#knobBase {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    background: #1f2d3d;
+}
+
+#knobPointer {
+    position: absolute;
+    width: 5px;
+    height: 50%;
+    top: 0%;
+    left: 48%;
+    background: red;
+    transform-origin: bottom center;
+    transform: rotate(-135deg);
+    transition: transform 0.2s ease;
+	border-radius: 4rem;
+}
 input{
 	background: #ffffff;
 	border-radius: 2rem;
@@ -142,6 +186,11 @@ h2{
 .btn:hover {
     background: #3a7acc;
 	color: #ffffff;
+}
+div.small_input{
+	display:inline-flex;
+	align-items:center;
+	gap:0.5rem;
 }
 #setDefaultWifi{
 	width:auto;
@@ -181,6 +230,15 @@ h2{
 	gap: 1rem;
 	justify-content: center;
 	align-items: center;
+}
+
+@media(max-width: 1280px){
+	div.val_list{
+		flex-direction: column;
+	}
+	div.val_box var{
+		margin-left: 1rem;
+	}
 }
 
 @media(max-width: 600px){

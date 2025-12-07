@@ -1,4 +1,5 @@
 let REFRESH_RATE = 200; // valore di default in millisecondi
+let charts = {};
 
 async function caricaDati(){
 	try{
@@ -13,10 +14,21 @@ async function caricaDati(){
 		if(T) T.textContent = d.temperatura ?? "";
 		if(V) V.textContent = d.volume ?? "";
 
-		set(H, d.umidita, "humidity");
-		set(T, d.temperatura, "temperature");
-		set(V, d.volume, "volume");
+        aggiornaKnob(Number(d.volume || 0));
 
+        const Readstorico = await fetch('storico.json',{cache: 'no-store'});
+        const storico = await Readstorico.json();
+
+        const labels = storico.misurazioni.map((_,i) => i + 1);
+
+        charts.humidity.data.labels=labels;
+        charts.humidity.data.datasets[0].data = storico.misurazioni.map(x => Number(x.umidita || 0));
+
+        charts.temperature.data.labels = labels;
+        charts.temperature.data.datasets[0].data = storico.misurazioni.map(x => Number(x.temperatura || 0));
+
+        charts.humidity.update();
+        charts.temperature.update();
 	}catch(e){
 		console.error("Errore lettura dati:", e);
 	}
@@ -30,7 +42,7 @@ async function caricaImpostazioni(){
 		document.getElementById("ssid").value = w.ssid;
 		document.getElementById("password").value = w.password;
 		document.getElementById("r_rate").value =w.refresh_rate;
-		REFRESH_RATE=Number(w.refresh_rate)*1000;
+		document.getElementById("graph_rate").value=w.graph_rate;
 	}catch(_){}
 }
 
@@ -41,6 +53,7 @@ async function salvaWifi(e){
 	const ssid =  document.getElementById("ssid").value || "";
 	const password = document.getElementById("password").value || "";
 	const refresh_rate = Number(document.getElementById("r_rate").value || "1");
+    const graph_rate = Number(document.getElementById("graph_rate").value || "1");
 	const cb = document.getElementById("setDefaultWifi");
 	
 	const r = await fetch("settings.json");
@@ -53,6 +66,7 @@ async function salvaWifi(e){
         settings.d_password = password;
     }
 	settings.refresh_rate = refresh_rate;
+    settings.graph_rate = graph_rate;
 	const st = document.getElementById("saveStatus");
 	if(st) st.textContent = "Salvataggio...";
 	try{
@@ -80,7 +94,6 @@ async function salvaWifi(e){
 }
 
 (function(){
-    let charts = {};
 
     function creaGrafico(idCanvas, label){
         const canvas = document.getElementById(idCanvas);
@@ -92,9 +105,11 @@ async function salvaWifi(e){
             datasets: [{
                 label: label,
                 data: [0],
-                backgroundColor: ['#0c72e7ff'],
+                backgroundColor: ['#556c87ff'],
                 borderColor: ['#2163aeff'],
-                borderWidth: 1
+                borderWidth: 1,
+                tension: 0,
+                pointRadius: 1
             }]
         };
 
@@ -125,8 +140,7 @@ async function salvaWifi(e){
 
             const valori = {
                 humidity: Number(d.umidita || 0),
-                temperature: Number(d.temperatura || 0),
-                volume: Number(d.volume || 0)
+                temperature: Number(d.temperatura || 0)
             };
 
             for(const key in valori){
@@ -141,7 +155,6 @@ async function salvaWifi(e){
     function start(){
         charts.humidity = creaGrafico('grafico_humidity', 'Umidità - Ultima Ora');
         charts.temperature = creaGrafico('grafico_temperature', 'Temperatura - Ultima Ora');
-        charts.volume = creaGrafico('grafico_volume', 'Volume - Ultima Ora');
         aggiornaDati();
         setInterval(aggiornaDati, 1000);
     }
@@ -149,6 +162,15 @@ async function salvaWifi(e){
     if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
     else start();
 })();
+
+function aggiornaKnob(volume){
+    const pointer = document.getElementById("knobPointer");
+    if(!pointer) return;
+
+    // volume da 0 a 100 → ruota da -135° a +135°
+    const deg = -135 + (volume / 100) * 270;
+    pointer.style.transform = `rotate(${deg}deg)`;
+}
 
 document.addEventListener("DOMContentLoaded",()=>{
 	const form = document.getElementById("settingsBox");
