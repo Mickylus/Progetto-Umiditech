@@ -2,7 +2,7 @@ let REFRESH_RATE = 200; // valore di default in millisecondi
 
 async function caricaDati(){
 	try{
-		const r = await fetch("dati.json");
+		const r = await fetch("dati.json", { cache: "no-store" });
 		const d = await r.json();
 
 		const H = document.getElementById("humidity");
@@ -40,7 +40,7 @@ async function salvaWifi(e){
 	}
 	const ssid =  document.getElementById("ssid").value || "";
 	const password = document.getElementById("password").value || "";
-	const refresh_rate = document.getElementById("r_rate").value || "";
+	const refresh_rate = Number(document.getElementById("r_rate").value || "1");
 	const cb = document.getElementById("setDefaultWifi");
 	
 	const r = await fetch("settings.json");

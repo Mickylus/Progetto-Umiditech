@@ -4,18 +4,19 @@
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 #include <WiFi.h>
+#include <Wire.h>
 
 
 // Pin SD
-#define MOSI_SD 14
-#define MISO_SD 13
-#define SCK_SD  4
+#define MOSI_SD 23
+#define MISO_SD 19
+#define SCK_SD  18
 #define CS_SD   5
 
 AsyncWebServer server(80);
 
 unsigned long lastWrite = 0;
-const unsigned long WRITE_INTERVAL_MS = 2000; // write dati.json every 2s
+const unsigned long WRITE_INTERVAL_MS = 5000; // write dati.json every 5s
 
 // Synthetic sensor values
 int hum = 34;
@@ -32,7 +33,7 @@ void aggiornaDati();
 String contentType(const String &filename);
 
 void setup(){
-    Serial.begin(9600);
+    Serial.begin(115200);
     Serial.println("Starting ESP32 Async SD server");
 
     SPI.begin(SCK_SD, MISO_SD, MOSI_SD, CS_SD);
@@ -40,24 +41,44 @@ void setup(){
         Serial.println("SD init failed. Check wiring and CS pin.");
     }else{
         Serial.println("SD initialized.");
-    }
-    connectWiFi();
-    // Fornisce la pagina web
-    server.onNotFound([](AsyncWebServerRequest *request){
-        String path = "/web" + request->url();
-        if(path.endsWith("/")) path += "index.html"; 
-        if(SD.exists(path)){
-            AsyncWebServerResponse *response = request->beginResponse(SD, path, contentType(path));
-            response->addHeader("Cache-Control", "max-age=3600"); // cache per 1 ora
-            request->send(response);
+        connectWiFi();
+        // GET per leggere settings.json
+        server.on("/settings.json", HTTP_GET, [](AsyncWebServerRequest *request){
+        if(SD.exists("/settings.json")){
+            request->send(SD, "/settings.json", "application/json");
         } else {
-            request->send(404, "text/plain", "File Not Found");
+            request->send(404, "application/json", "{}");
         }
-    });
-    server.begin();
-    Serial.println("HTTP server started");
-    if(!SD.exists("/dati.json")){
-        aggiornaDati();
+        });
+        // POST per scrivere settings.json
+        server.on("/settings.json", HTTP_POST, [](AsyncWebServerRequest *request){},NULL,[](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
+            File f = SD.open("/settings.json", FILE_WRITE);
+            if(f){
+                f.write(data, len);
+                f.close();
+                request->send(200, "application/json", "{\"status\":\"ok\"}");
+            } else {
+                request->send(500, "application/json", "{\"status\":\"error\"}");
+            }
+        });
+
+        // Fornisce la pagina web
+        server.onNotFound([](AsyncWebServerRequest *request){
+            String path = request->url();
+            if(path.endsWith("/")) path += "index.html"; 
+            if(SD.exists(path)){
+                AsyncWebServerResponse *response = request->beginResponse(SD, path, contentType(path));
+                response->addHeader("Cache-Control", "max-age=3600"); // cache per 1 ora
+                request->send(response);
+            } else {
+                request->send(404, "text/plain", "File Not Found");
+            }
+        });
+        server.begin();
+        Serial.println("HTTP server started");
+        if(!SD.exists("/dati.json")){
+            aggiornaDati();
+        }
     }
 }
 
@@ -111,8 +132,14 @@ void writeFile(const char *path, const String &data) {
 }
 
 void aggiornaDati(){
-    hum = (hum + 1) % 101;
-    temp = (temp + 1) % 101;
+    hum++;
+    temp++;
+    if(hum>100){
+        hum=0;
+    }
+    if(temp>100){
+        temp=0;
+    }
     String json = "{";
     json += "\"umidita\":" + String(hum) + ",";
     json += "\"temperatura\":" + String(temp) + ",";
@@ -122,11 +149,11 @@ void aggiornaDati(){
 }
 
 bool readWifiConfig(String &ssid, String &password, String &d_ssid, String &d_password){
-    if(!SD.exists("/web/settings.json")){
+    if(!SD.exists("/settings.json")){
         Serial.println("settings.json non trovato");
         return false;
     }
-    File f = SD.open("/web/settings.json", FILE_READ);
+    File f = SD.open("/settings.json", FILE_READ);
     if (!f){
         Serial.println("Impossibile aprire settings.json");
         return false;
@@ -165,8 +192,8 @@ bool readWifiConfig(String &ssid, String &password, String &d_ssid, String &d_pa
 }
 
 void connectWiFi(){
-    String ssid, password, dssid,dpassword;
-    if(!readWifiConfig(ssid,password,dssid,dpassword)){
+    String ssid, password, d_ssid,d_password;
+    if(!readWifiConfig(ssid,password,d_ssid,d_password)){
         Serial.println("Nessun WiFi configurato.");
         return;
     }
@@ -187,7 +214,7 @@ void connectWiFi(){
         Serial.println("\nConnessione a " + ssid + " fallita!");
         Serial.println("Provo con il WiFi di default\n");
         WiFi.mode(WIFI_STA);
-        WiFi.begin(dssid.c_str(), dpassword.c_str());
+        WiFi.begin(d_ssid.c_str(), d_password.c_str());
         start = millis();
         while (WiFi.status() != WL_CONNECTED && millis() - start < 10000) {
             delay(500);
@@ -198,7 +225,7 @@ void connectWiFi(){
             Serial.print("IP: ");
             Serial.println(WiFi.localIP());
         }else{
-            Serial.println("Connessione a " + dssid +" fallita!");
+            Serial.println("Connessione a " + d_ssid +" fallita!");
         }
     }
 }
