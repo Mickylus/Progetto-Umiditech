@@ -19,13 +19,22 @@ async function caricaDati(){
         const Readstorico = await fetch('storico.json',{cache: 'no-store'});
         const storico = await Readstorico.json();
 
-        const labels = storico.misurazioni.map((_,i) => i + 1);
+        const ReadGRate = await fetch('settings.json',{cache: 'no-store'});
+        const GRate = await ReadGRate.json();
 
+        const GRateFrehs = Number(GRate.graph_rate);
+
+        let HourGraph = 60/GRateFrehs;
+
+        const ultime = storico.misurazioni.slice(-HourGraph);
+
+        const labels = ultime.map(x => x.time || ""); // mostra l’orario
+        
         charts.humidity.data.labels=labels;
-        charts.humidity.data.datasets[0].data = storico.misurazioni.map(x => Number(x.umidita || 0));
+        charts.humidity.data.datasets[0].data = ultime.map(x => Number(x.umidita || 0));
 
         charts.temperature.data.labels = labels;
-        charts.temperature.data.datasets[0].data = storico.misurazioni.map(x => Number(x.temperatura || 0));
+        charts.temperature.data.datasets[0].data = ultime.map(x => Number(x.temperatura || 0));
 
         charts.humidity.update();
         charts.temperature.update();
@@ -120,11 +129,17 @@ async function salvaWifi(e){
                 responsive: true,
                 maintainAspectRatio: false,
                 scales: {
-                    y: { beginAtZero: true }
-                    
+                    y: { beginAtZero: true },                    
                 },
                 plugins: {
-                    legend: { display: false }
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            title: function(ctx) {
+                                return ctx[0].raw.time;  // mostra l'orario vero
+                            }
+                        }
+                    }
                 }
             }
         };
@@ -153,8 +168,8 @@ async function salvaWifi(e){
     }
 
     function start(){
-        charts.humidity = creaGrafico('grafico_humidity', 'Umidità - Ultima Ora');
-        charts.temperature = creaGrafico('grafico_temperature', 'Temperatura - Ultima Ora');
+        charts.humidity = creaGrafico('grafico_humidity', '');
+        charts.temperature = creaGrafico('grafico_temperature', '');
         aggiornaDati();
         setInterval(aggiornaDati, 1000);
     }

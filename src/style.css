@@ -6,13 +6,13 @@
 }
 @font-face{
 	font-family: 'Aristotelica';
-	src: url('fonts/aristotelica/AristotelicaSmallCaps-Regular.ttf') format('truetype');
+	src: url('fonts/aristotelica/AristotelicaSmallCaps-Regular.woff') format('woff');
 	font-weight: normal;
 	font-style: normal;
 }
 @font-face{
 	font-family: 'Panton';
-	src: url('fonts/panton/Panton-Trial-Black.ttf') format('truetype');
+	src: url('fonts/panton/Panton-Trial-Black.woff') format('woff');
 	font-weight: normal;
 	font-style: normal;
 }
@@ -29,7 +29,7 @@ h1.titolo{
 	color: #0c373e;
 	text-decoration:underline;
 	font-size: 4rem;
-	font-family:'Panton';
+	font-family:'Panton', sans-serif;
 	text-align: center;
 	font-weight: lighter;
 }
@@ -93,7 +93,7 @@ a{
 var{
 	font-weight: bold;
 	font-style: normal;
-	font-family: 'Panton';
+	font-family: 'Panton', sans-serif;
 }
 #menu{
 	position: fixed;
@@ -115,7 +115,7 @@ span.note{
 	font-size: 1.1em;
 }
 span.num{
-	font-family: 'panton';
+	font-family: 'Panton', sans-serif;
 	font-size: 0.8em;
 }
 span.note:hover{
@@ -233,8 +233,11 @@ div.small_input{
 }
 
 @media(max-width: 1280px){
-	div.val_list{
+	#val_list{
 		flex-direction: column;
+	}
+	div.val_box{
+		width: 65%;
 	}
 	div.val_box var{
 		margin-left: 1rem;
@@ -244,6 +247,7 @@ div.small_input{
 @media(max-width: 600px){
     body{
         padding: 10px;
+		text-shadow:0.1rem 0.1rem #2120201d;
     }
     .card {
         padding: 15px;
@@ -259,6 +263,9 @@ div.small_input{
 	}
 	#menu a{
 		margin-left: 0.1rem;
-		font-size: 0.9rem;
+		font-size: 0.9em;
+	}
+	#vol_rot{
+		height: fit-content;
 	}
 }

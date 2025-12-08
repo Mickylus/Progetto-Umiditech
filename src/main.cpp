@@ -5,6 +5,11 @@
 #include <ESPAsyncWebServer.h>
 #include <WiFi.h>
 #include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+#include <TimeLib.h>
+#include <DHT.h>
+#include <NTPClient.h>
+#include <WiFiUdp.h>
 
 
 // Pin SD
@@ -12,22 +17,36 @@
 #define MISO_SD 19
 #define SCK_SD  18
 #define CS_SD   5
+// Pin Display
+#define LCD_SCL 22
+#define LCD_SDA 21
+// Pin Sensori
+#define POT_PIN 34
+#define BUZZ_PIN 27
+#define DHT_PIN 13
+#define DHT_TYPE DHT11
 
 AsyncWebServer server(80);
+LiquidCrystal_I2C lcd(0x27,16,2);
+
+DHT dht(DHT_PIN,DHT_TYPE);
+
+// NTP
+WiFiUDP ntpUDP;
+NTPClient timeClient(ntpUDP, "pool.ntp.org", 3600*1); // offset in secondi (qui +1 ora)
 
 unsigned long lastWrite = 0;
+unsigned long lastLcd = 0;
 unsigned long lastStoricoWrite = 0;
 int REFRESH_RATE = 5000; // write dati.json every 5s
-int GRAPH_RATE = 50000;
+int GRAPH_RATE = 60000;
+int g_count = 0;
+int MAX_MEM = 288;
 
-// Synthetic sensor values
-int hum = 34;
-int temp = 23;
-int vol = 60;
 
-int old_hum = 0;
-int old_temp = 0;
-int old_vol = 0;
+float hum=0;
+float temp=0;
+int vol=0;
 
 void connectWiFi();
 bool serveFromSD(AsyncWebServerRequest *);
@@ -35,15 +54,26 @@ void aggiornaDati();
 String contentType(const String &filename);
 void salvaStorico();
 void caricaConfig();
+void generaStorico();
 
 void setup(){
 	Serial.begin(115200);
+	Wire.begin(LCD_SDA,LCD_SCL);
+
+	lcd.init();
+	lcd.backlight();
+	lcd.setCursor(0,0);
+	lcd.print("Caricamento wifi...");
 	Serial.println("Starting ESP32 Async SD server");
 
 	SPI.begin(SCK_SD, MISO_SD, MOSI_SD, CS_SD);
 	if(!SD.begin(CS_SD,SPI)){
 		Serial.println("SD init failed. Check wiring and CS pin.");
+		lcd.setCursor(0,0);
+		lcd.print("Lettura SD fallita!");
 	}else{
+		lcd.setCursor(0,0);
+		lcd.print("Lettura SD riuscita!");
 		Serial.println("SD initialized.");
 		connectWiFi();
 		// GET per leggere settings.json
@@ -61,11 +91,29 @@ void setup(){
 				f.write(data, len);
 				f.close();
 				caricaConfig();
+				lcd.setCursor(0,0);
+				lcd.print("Nuove Impostazioni:");
+				lcd.setCursor(0,1);
+				lcd.print("Rr: ");
+				lcd.print(REFRESH_RATE/1000);
+				lcd.print(" Gr: ");
+				lcd.print(GRAPH_RATE/60000);
+				lcd.print("     ");
 				request->send(200, "application/json", "{\"status\":\"ok\"}");
 			} else {
 				request->send(500, "application/json", "{\"status\":\"error\"}");
 			}
 		});
+
+		timeClient.begin();
+  		timeClient.update();
+
+  		// Imposto l'ora di TimeLib
+  		setTime(timeClient.getEpochTime());
+
+		pinMode(POT_PIN,INPUT);
+		pinMode(BUZZ_PIN,OUTPUT);
+		dht.begin();
 
 		// Fornisce la pagina web
 		server.onNotFound([](AsyncWebServerRequest *request){
@@ -81,10 +129,8 @@ void setup(){
 		});
 		server.begin();
 		Serial.println("HTTP server started");
-		if(!SD.exists("/dati.json")){
-			aggiornaDati();
-		}
 		caricaConfig();
+		generaStorico();
 	}
 }
 
@@ -92,19 +138,46 @@ void loop(){
 	// Aggiorno i dati ogni 2 secondi se sono cambiati per evitare l'usura della microSD
 	if (millis() - lastWrite >= REFRESH_RATE) {
 		lastWrite = millis();
-		if((old_hum!=hum) || (old_temp!=temp) || (old_vol!=vol)){
-			old_hum=hum;
-			old_temp=temp;
-			old_vol=vol;
-			aggiornaDati();
-		}
+		aggiornaDati();
 	}
 	if(millis()-lastStoricoWrite >= GRAPH_RATE){
+		if(timeClient.update()){
+      		setTime(timeClient.getEpochTime());
+    	}
 		lastStoricoWrite=millis();
-		salvaStorico();
+		if(g_count>=MAX_MEM){
+			generaStorico();
+			g_count=0;
+		}else{
+			salvaStorico();
+		}
+		g_count++;
 	}
-}
+	if(millis() >= 10000){
+		if(millis()-lastLcd >= 1000){
+		lastLcd=millis();
+		lcd.setCursor(0,0);
+		lcd.print("Umiditech - Wifi");
+		lcd.setCursor(0,1);
+		lcd.print("H:");
+		lcd.print((int)dht.readHumidity());
+		lcd.print("% , T:");
+		lcd.print(dht.readTemperature());
+		lcd.print("°    ");
+		}
+	}
 
+}
+void generaStorico(){
+	if(SD.exists("/storico.json")){
+		SD.remove("/storico.json");
+	}
+	File f = SD.open("/storico.json",FILE_WRITE);
+	String timeStamp = "\""+String(hour())+":"+String(minute())+":"+String(second())+"\"";
+	String newStoric = "{\"misurazioni\":[{\"umidita\":"+String(hum)+",\"temperatura\":"+String(temp)+",\"time\":"+timeStamp+"}]}";
+	f.print(newStoric);
+	f.close();
+}
 // Scrive file sulla SD
 void writeFile(const char *path, const String &data) {
 	// Cancello il file
@@ -117,45 +190,21 @@ void writeFile(const char *path, const String &data) {
 }
 
 void salvaStorico(){
-    String raw = "";
-    if(!SD.exists("/storico.json")){
-        return;
-    }
+	if(!SD.exists("/storico.json")){
+		return;
+	}
+	File f = SD.open("/storico.json",FILE_READ);
+	String s = f.readString();
+	f.close();
 
-    File f = SD.open("/storico.json", FILE_READ);
-    while(f.available()){
-        raw += (char)f.read();
-    }
-    f.close();
+	s.remove(s.length()-2);
 
-    raw.replace("\n",""); raw.replace("\r",""); raw.replace(" ","");
-
-    String arrayStr;
-    int start = raw.indexOf("[");
-    int end = raw.indexOf("]");
-    arrayStr = raw.substring(start + 1, end);
-
-    // Rimuovi primo elemento se ci sono già 59
-    int count = 0;
-    for(int i=0;i<arrayStr.length();i++){
-        if(arrayStr[i] == '}') count++;
-    }
-    if(count >= 59){
-        int firstEnd = arrayStr.indexOf("}") + 1;
-        arrayStr = arrayStr.substring(firstEnd + 1);
-        if(arrayStr[0] == ',') arrayStr = arrayStr.substring(1); // rimuove eventuale virgola iniziale
-    }
-
-    // Aggiungi nuovo elemento
-    if(arrayStr.length() > 0) arrayStr += ",";
-    arrayStr += "{\"umidita\":" + String(hum) + ",\"temperatura\":" + String(temp) + "}";
-
-    String nuovoJson = "{\"misurazioni\":[" + arrayStr + "]}";
-
-    SD.remove("/storico.json");
-    f = SD.open("/storico.json", FILE_WRITE);
-    f.print(nuovoJson);
-    f.close();
+	f = SD.open("/storico.json",FILE_WRITE);
+	f.print(s);
+	String timeStamp = "\""+String(hour())+":"+String(minute())+":"+String(second())+"\"";
+	String add = ",{\"umidita\":"+String(hum)+",\"temperatura\":"+String(temp)+",\"time\":"+timeStamp+"}]}";
+	f.print(add);
+	f.close();
 }
 
 void caricaConfig(){
@@ -182,8 +231,8 @@ void caricaConfig(){
 	REFRESH_RATE = raw.substring(refreshStart,refreshEnd).toInt();
 	REFRESH_RATE *= 1000;
 	GRAPH_RATE = raw.substring(graphStart,graphEnd).toInt();
-	GRAPH_RATE *= 10000;
-
+	MAX_MEM = 24*GRAPH_RATE;
+	GRAPH_RATE *= 60000;
 }
 // Aiuta a caricare i file
 String contentType(const String &filename){
@@ -211,17 +260,35 @@ String contentType(const String &filename){
 	if(filename.endsWith(".ttf")){
 		return "font/ttf";
 	}
+	if(filename.endsWith(".woff")){
+		return "font/woff";
+	}
 	return "text/plain";
 }
 
 void aggiornaDati(){
-	hum++;
-	temp++;
-	if(hum>100){
+	int val=analogRead(POT_PIN);
+	Serial.println(val);
+	vol=map(val,50,4000,0,100);
+	float h=dht.readHumidity();
+	float t=dht.readTemperature();
+	Serial.println(h);
+	Serial.println(t);
+	if(!isnan(h)){
+		hum=h;
+	}else{
 		hum=0;
 	}
-	if(temp>100){
+	if(!isnan(t)){
+		temp=t;
+	}else{
 		temp=0;
+	}
+	if(vol>100){
+		vol=100;
+	}
+	if(vol<0){
+		vol=0;
 	}
 	String json = "{";
 	json += "\"umidita\":" + String(hum) + ",";
@@ -280,7 +347,11 @@ void connectWiFi(){
 		Serial.println("Nessun WiFi configurato.");
 		return;
 	}
+	lcd.setCursor(0,0);
+	lcd.print("Wifi: ");
+	lcd.print(ssid);
 	Serial.println("Connessione a: " + ssid);
+
 	WiFi.mode(WIFI_STA);
 	WiFi.begin(ssid.c_str(), password.c_str());
 	unsigned long start = millis();
@@ -292,9 +363,19 @@ void connectWiFi(){
 		Serial.println("\nConnesso!");
 		Serial.print("IP: ");
 		Serial.println(WiFi.localIP());
+		lcd.setCursor(0,0);
+		lcd.print("Connesso! IP:");
+		lcd.print(ssid);
+		lcd.setCursor(0,1);
+		lcd.print(WiFi.localIP());
 	}else{
 		// Riprovo con il wifi di default
 		Serial.println("\nConnessione a " + ssid + " fallita!");
+		lcd.setCursor(0,0);
+		lcd.print("Connessione fallita!");
+		lcd.setCursor(0,0);
+		lcd.print("Wifi: ");
+		lcd.print(d_ssid);
 		Serial.println("Provo con il WiFi di default\n");
 		WiFi.mode(WIFI_STA);
 		WiFi.begin(d_ssid.c_str(), d_password.c_str());
@@ -307,8 +388,14 @@ void connectWiFi(){
 			Serial.println("\nConnesso!");
 			Serial.print("IP: ");
 			Serial.println(WiFi.localIP());
+			lcd.setCursor(0,0);
+			lcd.print("Connesso! IP:");
+			lcd.print(d_ssid);
+			lcd.setCursor(0,1);
+			lcd.print(WiFi.localIP());
 		}else{
 			Serial.println("Connessione a " + d_ssid +" fallita!");
 		}
+		setTime(16,58,0,8,12,2025); // ore:minuti:secondi, giorno:mese:anno
 	}
 }
