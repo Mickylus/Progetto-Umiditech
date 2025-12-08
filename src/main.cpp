@@ -167,7 +167,9 @@ void loop(){
 		if(millis()-lastLcd >= 1000){
 		lastLcd=millis();
 		lcd.setCursor(0,0);
-		lcd.print("Umiditech - Wifi");
+		lcd.print("Umiditech  ");
+		String time=String(hour())+":"+String(minute());
+		lcd.print(time);
 		lcd.setCursor(0,1);
 		lcd.print("H:");
 		lcd.print((int)dht.readHumidity());
@@ -217,10 +219,19 @@ void salvaStorico(){
 
 	s.remove(s.length()-2);
 
-	if(hum=0){
+	float h=dht.readHumidity();
+	float t=dht.readTemperature();
+	
+	if(!isnan(h)){
+		hum=h;
+		oldHum=hum;
+	}else{
 		hum=oldHum;
 	}
-	if(temp=0){
+	if(!isnan(t)){
+		temp=t;
+		oldTemp=temp;
+	}else{
 		temp=oldTemp;
 	}
 	f = SD.open("/storico.json",FILE_WRITE);
@@ -296,8 +307,11 @@ void aggiornaDati(){
 	vol=map(val,50,4000,0,100);
 	float h=dht.readHumidity();
 	float t=dht.readTemperature();
-	Serial.println(h);
-	Serial.println(t);
+	Serial.print("DHT 11 | Umidità:");
+	Serial.print(h);
+	Serial.print("% - Temperatura: ");
+	Serial.print(t);
+	Serial.println("°");
 	if(!isnan(h)){
 		hum=h;
 		oldHum=hum;
