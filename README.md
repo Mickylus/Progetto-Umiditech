@@ -1,94 +1,130 @@
 
 # Progetto Umiditech — Relazione tecnica
-
 ## 1. Sommario
 
-Questo progetto implementa una semplice Web App per monitorare tre valori sintetici (umidità, temperatura, volume) usando un ESP32 che monta una scheda SD. Il dispositivo serve una cartella `web` via HTTP e aggiorna periodicamente il file JSON `dati.json` contenente i valori visualizzati dalla pagina web.
+Questa relazione descrive in dettaglio l'architettura hardware e software del progetto "Umiditech", i collegamenti elettrici, le funzioni principali del firmware e il ruolo dei file presenti nella cartella `src/`. Lo scopo è rendere il progetto facilmente replicabile, manutenibile e estendibile.
 
-## 2. Obiettivi
+## 2. Componenti hardware e collegamenti
 
-- Fornire una interfaccia web minima per visualizzare dati in tempo (grafici e valori).
-- Usare la SD per servire file statici HTML/CSS/JS e per salvare i dati generati dal microcontrollore.
-- Mantenere il codice semplice e facilmente estendibile.
+- Scheda: ESP32 (modulo DevKit o simile).
+- Memoria: scheda SD (FAT32) collegata via bus SPI.
 
-## 3. Componenti hardware
+Connessioni SPI implementate nel firmware (vedi `src/main.cpp`):
 
-- Scheda: ESP32 (qualsiasi modulo compatibile).
-- Memoria: scheda SD collegata via SPI.
-- Connessioni SPI usate nel codice (definite in `src/main.cpp`):
-	- MOSI: GPIO 15
-	- MISO: GPIO 2
-	- SCK:  GPIO 14
-	- CS:   GPIO 5
+| Segnale | Pin ESP32 (nel progetto) | Uso |
+|--------:|:------------------------:|:--- |
+| MOSI    | GPIO 15                 | Dati MOSI verso SD |
+| MISO    | GPIO 2                  | Dati MISO dalla SD |
+| SCK     | GPIO 14                 | Clock SPI |
+| CS      | GPIO 5                  | Chip select SD |
 
-Nota: adattare i pin allo specifico modulo/hardware se necessario.
+Nota: questi pin sono definiti in `main.cpp` con le macro `MOSI_SD`, `MISO_SD`, `SCK_SD`, `CS_SD`. Se il tuo modulo ESP32 usa pin differenti, aggiorna i valori corrispondenti.
 
-## 4. Panoramica software
+Schema di collegamento (semplificato):
 
-- Linguaggio: C++ (Arduino/PlatformIO).
-- Librerie principali: `SPI`, `SD`, `WebServer` (incluse nell'ecosistema ESP32 Arduino core).
-- File principale: `src/main.cpp` — monta la SD, avvia il server HTTP sulla porta 80, serve i file dalla cartella `/web` sulla SD e scrive periodicamente `/web/dati.json` con i valori.
-- La funzione di scrittura su SD è stata semplificata in `writeFile(const char*, const String&)` per sovrascrivere il file con i nuovi dati.
+- SD MOSI -> ESP32 GPIO15
+- SD MISO -> ESP32 GPIO2
+- SD SCK  -> ESP32 GPIO14
+- SD CS   -> ESP32 GPIO5
+- 3.3V e GND condivisi
 
-## 5. Interfaccia web
+Consiglio: usare un adattatore SD card/SD socket con livelli logici corretti (3.3V) e provare il semplice sketch di test SD prima di eseguire il firmware.
 
-I file dell'interfaccia si trovano in `src/Web/` e includono:
-- `index.html` — pagina principale che mostra i valori e i grafici.
-- `settings.html` — pagina per impostazioni (SSID/password, frequenza di aggiornamento, checkbox per impostare il wifi come default).
-- `style.css` — stili della pagina (contiene regole per i box dei valori e layout responsive).
-- `carica_dati.js`, `grafico.js`, `chart.js` — script per caricare `dati.json` e disegnare i grafici.
+## 3. Panoramica delle funzioni principali (firmware)
 
-La pagina è progettata per essere servita direttamente dalla SD: basta copiare la cartella `Web` nella root della SD (o il suo contenuto sotto `/web`) perché il server la trovi.
+Il file `src/main.cpp` implementa le funzionalità principali. Di seguito le parti più importanti e il loro comportamento.
 
-## 6. Come compilare e caricare
+- `contentType(const String &filename)`
+	- Ritorna l'header `Content-Type` corretto in base all'estensione del file (html, css, js, json, png, jpg, ico).
 
-1. Aprire il progetto con PlatformIO o l'IDE Arduino (impostare la board ESP32 corretta).
-2. Compilare e caricare su ESP32.
-3. Preparare la SD: creare la cartella `/web` e copiare i file `index.html`, `settings.html`, `style.css` e gli script richiesti.
-4. Inserire la SD nell'ESP32 e avviare la scheda.
+- `serveFromSD(const String &uri)`
+	- Riceve un `uri` (es. `/index.html`) e costruisce il percorso su SD (`/web/index.html` se necessario).
+	- Controlla `SD.exists(path)` e apre il file per la lettura.
+	- Invia gli header CORS e `Cache-Control`, quindi streama il file tramite `server.streamFile()`.
 
-## 7. Uso e comportamento
+- `handleNotFound()`
+	- Handler impostato con `server.onNotFound(...)`. Se `serveFromSD()` trova il file, la richiesta è servita; altrimenti risponde con 404 e un messaggio semplice.
 
-- All'avvio il firmware monta la SD e avvia il server HTTP.
-- Il server risponde alle richieste servendo i file presenti sotto `/web` sulla SD.
-- Ogni `WRITE_INTERVAL_MS` (configurato in `main.cpp`) il firmware aggiorna `/web/dati.json` con i valori correnti.
+- `writeFile(const char *path, const String &data)`
+	- Semplice helper per sovrascrivere un file su SD: rimuove il file esistente (se presente), apre in scrittura e salva i dati.
+	- Ritorna `true` se la scrittura è andata a buon fine.
+	- Nota: è una funzione semplice; la versione originale includeva una scrittura atomica via file temporaneo, utile in presenza di interruzioni di alimentazione.
 
-Nota: la versione corrente del firmware non esegue automaticamente la connessione WiFi; se necessario è possibile ripristinare o aggiungere la logica per leggere le credenziali da `/web/wifi.json` e inizializzare la connessione (nel codice originario era prevista tale funzione).
+- `aggiornaDati()`
+	- Funzione che aggiorna le variabili simulate `umidita`, `temperatura`, `volumeVal` incrementandole e resettandole oltre 100.
+	- Costruisce una stringa JSON simile a `{ "umidita": 35, "temperatura": 24, "volume": 60 }` e la scrive su `/web/dati.json` usando `writeFile()`.
 
-## 8. Struttura del repository
+- `setup()`
+	- Inizializza la seriale, avvia SPI (`SPI.begin(SCK_SD, MISO_SD, MOSI_SD)`), inizializza la SD (`SD.begin(CS_SD, SPI)`), registra gli handler del server (attualmente solo `onNotFound`) e avvia il server HTTP (`server.begin()`).
+	- Se `/web/dati.json` non esiste, chiama `aggiornaDati()` per creare il file iniziale.
+
+- `loop()`
+	- Gestisce le richieste HTTP (`server.handleClient()`) e ogni `WRITE_INTERVAL_MS` invoca `aggiornaDati()` per aggiornare `dati.json`.
+
+Importante: la versione attuale del firmware non esegue la connessione WiFi automatica: le parti che leggevano `/web/wifi.json` e gestivano POST/OPTIONS per `/wifi.json` sono state rimosse per semplicità. Possono essere reintegrate quando si vuole gestire la configurazione via browser.
+
+## 4. Dati e formato
+
+- `dati.json`
+	- Esempio di contenuto generato dal firmware:
 
 ```
-platformio.ini
-include/
-lib/
-src/
-	main.cpp
-	Web/
-		index.html
-		settings.html
-		style.css
-		carica_dati.js
-		grafico.js
-		chart.js
-		immagini/
-		fonts/
-test/
+{ "umidita": 35, "temperatura": 24, "volume": 60 }
 ```
 
-## 9. Possibili estensioni future
+- `settings.json` e `storico.json`
+	- File presenti nella cartella `src/` come esempi o per uso dell'interfaccia web. `settings.json` può contenere preferenze lato client (intervallo di aggiornamento, opzioni) e `storico.json` può memorizzare campionamenti passati se lo si implementa.
 
-- Riattivare la lettura automatica delle credenziali WiFi da SD e la funzionalità POST `/wifi.json` per aggiornare le credenziali da browser.
-- Migliorare la scrittura atomica su SD per aumentare robustezza (utile se l'alimentazione è instabile).
-- Aggiungere autenticazione semplice per l'interfaccia di impostazioni.
-- Persistenza dei parametri (filtro, soglie, intervalli) su SD o in NVS.
+## 5. Struttura e ruoli dei file in `src/`
 
-## 10. Risoluzione problemi comuni
+- `main.cpp` — firmware ESP32 (montaggio SD, server HTTP, scrittura `dati.json`).
+- `index.html` — interfaccia principale (mostra valori e grafici).
+- `settings.html` — form per modificare impostazioni locali (SSID, password, frequenza) e checkbox per "Imposta come default".
+- `style.css` — regole CSS per layout, box valori, responsive.
+- `script.js` — script lato client che carica `dati.json` e aggiorna la UI; gestisce anche l'invio delle impostazioni se implementato.
+- `chart.js` — codice per disegnare i grafici nelle canvas presenti nella pagina.
+- `dati.json` — file aggiornato dal firmware con i valori attuali.
+- `storico.json` — (opzionale) file per storicizzare le misure.
+- `settings.json` — (opzionale) file lato client per memorizzare preferenze.
+- `favicon.ico`, `immagini/`, `fonts/` — risorse statiche.
 
-- Se il server non risponde: verificare che la SD sia montata correttamente e che la cartella `/web` esista.
-- Se i file non vengono trovati: controllare che i nomi dei file siano corretti e che la SD sia formattata FAT32.
-- Errori di scrittura su SD: controllare i collegamenti SPI e il pin CS.
+## 6. Collegamento tra Web UI e firmware
+
+- La Web UI periodicamente effettua fetch di `/dati.json` (o di `/web/dati.json` se servita con prefisso) per aggiornare i valori mostrati.
+- Il firmware genera e sovrascrive `/web/dati.json` ad intervalli regolari (definiti da `WRITE_INTERVAL_MS` in `main.cpp`).
+
+Se si vuole aggiornare impostazioni via browser, il flusso ideale è:
+1. L'utente compila `settings.html` e spunta "Imposta come default".
+2. La pagina invia un POST (o salva localmente in `settings.json`).
+3. Il firmware riceve la richiesta e salva le credenziali su SD (`/web/wifi.json`) o aggiorna `settings.json`.
+4. Il firmware può leggere `/web/wifi.json` al boot e connettersi (funzione `connectWiFiFromSD()` nella versione originaria del codice).
+
+## 7. Istruzioni pratiche per test e deployment
+
+1. Formatta la SD in FAT32 e crea la cartella `/web`.
+2. Copia i file web da `src/` nella SD mantenendo la struttura (`index.html`, `settings.html`, `style.css`, `script.js`, `chart.js`, `favicon.ico`, `immagini/`, `fonts/`).
+3. Inserisci la SD nell'ESP32 e alimenta la board.
+4. Apri il monitor seriale a 115200 baud per vedere i messaggi di debug (esito montaggio SD, avvio server e scritture di `dati.json`).
+5. Apri un browser e punta all'indirizzo IP dell'ESP32 (se connesso alla rete) oppure, se non connesso via WiFi, usa un adattatore serial-to-HTTP locale o copia i file dalla SD su un server web per testare l'interfaccia.
+
+Comandi rapidi (PlatformIO):
+
+```
+pio run               # Compila
+pio run --target upload  # Carica sulla board (board specificata in platformio.ini)
+pio run --target clean # Pulisce la build
+```
+
+## 8. Considerazioni sulla robustezza
+
+- Scrittura su SD: la funzione `writeFile()` è semplice e funziona nella maggior parte dei casi, ma non è totalmente atomica. Se si teme un'interruzione di alimentazione durante la scrittura, ripristinare la strategia con file temporaneo (`.tmp`) + rename per garantire atomicità.
+- Gestione errori: controllare sempre il valore di ritorno di `SD.begin()` e degli `open()` di file; loggare su seriale per debugging.
+
+## 9. Possibili estensioni e miglioramenti
+
+- Reinserire `connectWiFiFromSD()` per leggere `/web/wifi.json` e connettersi automaticamente.
+- Implementare endpoint POST `/wifi.json` con CORS per permettere la configurazione via browser.
+- Aggiungere autenticazione semplice sulla pagina `settings.html` per impedire modifiche non autorizzate.
+- Implementare storicizzazione su `storico.json` e pagine di visualizzazione storica.
 
 ---
-
-Se vuoi, posso: applicare la logica per la connessione WiFi da SD, ripristinare la scrittura atomica su SD, o integrare il salvataggio delle impostazioni via `settings.html`.
-
