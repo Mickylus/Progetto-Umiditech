@@ -24,7 +24,7 @@ async function caricaDati(){
 
         const GRateFrehs = Number(GRate.graph_rate);
 
-        let HourGraph = 60/GRateFrehs;
+        let HourGraph = 1440/GRateFrehs;
 
         const ultime = storico.misurazioni.slice(-HourGraph);
 
@@ -106,7 +106,9 @@ async function salvaWifi(e){
 
     function creaGrafico(idCanvas, label){
         const canvas = document.getElementById(idCanvas);
-        if(!canvas) return null;
+        if(!canvas){
+            return null;
+        }
         const ctx = canvas.getContext('2d');
 
         const data = {
@@ -149,13 +151,15 @@ async function salvaWifi(e){
 
     async function aggiornaDati(){
         try{
-            const resp = await fetch('dati.json', { cache: 'no-store' });
+            const resp = await fetch('storico.json', { cache: 'no-store' });
             if(!resp.ok) return;
             const d = await resp.json();
 
+            const first = storico.misurazioni[0];
+
             const valori = {
-                humidity: Number(d.umidita || 0),
-                temperature: Number(d.temperatura || 0)
+                humidity: Number(first.umidita || 0),
+                temperature: Number(first.temperatura || 0)
             };
 
             for(const key in valori){

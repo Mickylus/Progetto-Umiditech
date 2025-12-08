@@ -67,6 +67,9 @@ div.val_box:hover{
 	color: rgba(70, 110, 117, 0.963);
 
 }
+div.val_box:hover #knobBase{
+	background: rgba(70, 110, 117, 0.963);
+}
 div.val_box var{
 	margin-left: 5rem;
 }
@@ -139,6 +142,7 @@ span.note:hover{
     height: 100%;
     border-radius: 50%;
     background: #1f2d3d;
+	box-shadow: 0.1rem 0.3rem #2120204f;
 }
 
 #knobPointer {
@@ -152,6 +156,7 @@ span.note:hover{
     transform: rotate(-135deg);
     transition: transform 0.2s ease;
 	border-radius: 4rem;
+	box-shadow: 0.1rem 0.2rem rgb(90, 28, 28);
 }
 input{
 	background: #ffffff;

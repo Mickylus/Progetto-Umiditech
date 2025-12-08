@@ -35,6 +35,7 @@ DHT dht(DHT_PIN,DHT_TYPE);
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, "pool.ntp.org", 3600*1); // offset in secondi (qui +1 ora)
 
+int start_point = 0;
 unsigned long lastWrite = 0;
 unsigned long lastLcd = 0;
 unsigned long lastStoricoWrite = 0;
@@ -42,11 +43,14 @@ int REFRESH_RATE = 5000; // write dati.json every 5s
 int GRAPH_RATE = 60000;
 int g_count = 0;
 int MAX_MEM = 288;
-
+bool isOpenWifi = true;
 
 float hum=0;
 float temp=0;
 int vol=0;
+
+float oldHum=0;
+float oldTemp=0;
 
 void connectWiFi();
 bool serveFromSD(AsyncWebServerRequest *);
@@ -109,8 +113,11 @@ void setup(){
   		timeClient.update();
 
   		// Imposto l'ora di TimeLib
-  		setTime(timeClient.getEpochTime());
-
+		if(isOpenWifi){
+  			setTime(timeClient.getEpochTime());
+		}else{
+			setTime(16,58,0,8,12,2025); // ore:minuti:secondi, giorno:mese:anno)
+		}
 		pinMode(POT_PIN,INPUT);
 		pinMode(BUZZ_PIN,OUTPUT);
 		dht.begin();
@@ -132,6 +139,7 @@ void setup(){
 		caricaConfig();
 		generaStorico();
 	}
+	start_point=millis();
 }
 
 void loop(){
@@ -141,9 +149,11 @@ void loop(){
 		aggiornaDati();
 	}
 	if(millis()-lastStoricoWrite >= GRAPH_RATE){
-		if(timeClient.update()){
-      		setTime(timeClient.getEpochTime());
-    	}
+		if(isOpenWifi){
+			if(timeClient.update()){
+				setTime(timeClient.getEpochTime());
+			}
+		}
 		lastStoricoWrite=millis();
 		if(g_count>=MAX_MEM){
 			generaStorico();
@@ -153,7 +163,7 @@ void loop(){
 		}
 		g_count++;
 	}
-	if(millis() >= 10000){
+	if(millis() - start_point>= 10000){
 		if(millis()-lastLcd >= 1000){
 		lastLcd=millis();
 		lcd.setCursor(0,0);
@@ -171,6 +181,14 @@ void loop(){
 void generaStorico(){
 	if(SD.exists("/storico.json")){
 		SD.remove("/storico.json");
+	}
+	float h = dht.readHumidity();
+	float t = dht.readTemperature();
+	if(!isnan(h)){
+		hum=h;
+	}
+	if(!isnan(t)){
+		temp=t;
 	}
 	File f = SD.open("/storico.json",FILE_WRITE);
 	String timeStamp = "\""+String(hour())+":"+String(minute())+":"+String(second())+"\"";
@@ -199,6 +217,12 @@ void salvaStorico(){
 
 	s.remove(s.length()-2);
 
+	if(hum=0){
+		hum=oldHum;
+	}
+	if(temp=0){
+		temp=oldTemp;
+	}
 	f = SD.open("/storico.json",FILE_WRITE);
 	f.print(s);
 	String timeStamp = "\""+String(hour())+":"+String(minute())+":"+String(second())+"\"";
@@ -231,7 +255,7 @@ void caricaConfig(){
 	REFRESH_RATE = raw.substring(refreshStart,refreshEnd).toInt();
 	REFRESH_RATE *= 1000;
 	GRAPH_RATE = raw.substring(graphStart,graphEnd).toInt();
-	MAX_MEM = 24*GRAPH_RATE;
+	MAX_MEM = 6*(60/GRAPH_RATE);
 	GRAPH_RATE *= 60000;
 }
 // Aiuta a caricare i file
@@ -276,11 +300,13 @@ void aggiornaDati(){
 	Serial.println(t);
 	if(!isnan(h)){
 		hum=h;
+		oldHum=hum;
 	}else{
 		hum=0;
 	}
 	if(!isnan(t)){
 		temp=t;
+		oldTemp=temp;
 	}else{
 		temp=0;
 	}
@@ -365,7 +391,6 @@ void connectWiFi(){
 		Serial.println(WiFi.localIP());
 		lcd.setCursor(0,0);
 		lcd.print("Connesso! IP:");
-		lcd.print(ssid);
 		lcd.setCursor(0,1);
 		lcd.print(WiFi.localIP());
 	}else{
@@ -376,6 +401,7 @@ void connectWiFi(){
 		lcd.setCursor(0,0);
 		lcd.print("Wifi: ");
 		lcd.print(d_ssid);
+		lcd.print("    ");
 		Serial.println("Provo con il WiFi di default\n");
 		WiFi.mode(WIFI_STA);
 		WiFi.begin(d_ssid.c_str(), d_password.c_str());
@@ -390,12 +416,11 @@ void connectWiFi(){
 			Serial.println(WiFi.localIP());
 			lcd.setCursor(0,0);
 			lcd.print("Connesso! IP:");
-			lcd.print(d_ssid);
 			lcd.setCursor(0,1);
 			lcd.print(WiFi.localIP());
+			isOpenWifi=false;
 		}else{
 			Serial.println("Connessione a " + d_ssid +" fallita!");
 		}
-		setTime(16,58,0,8,12,2025); // ore:minuti:secondi, giorno:mese:anno
 	}
 }
