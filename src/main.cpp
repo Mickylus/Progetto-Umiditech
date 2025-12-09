@@ -116,7 +116,7 @@ void setup(){
 		if(isOpenWifi){
   			setTime(timeClient.getEpochTime());
 		}else{
-			setTime(16,58,0,8,12,2025); // ore:minuti:secondi, giorno:mese:anno)
+			setTime(atoi(__TIME__),atoi(__TIME__+3),atoi(__TIME__+6),13,12,2025); // ore:minuti:secondi, giorno:mese:anno)
 		}
 		pinMode(POT_PIN,INPUT);
 		pinMode(BUZZ_PIN,OUTPUT);
