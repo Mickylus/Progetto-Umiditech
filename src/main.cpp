@@ -25,6 +25,7 @@
 #define BUZZ_PIN 27
 #define DHT_PIN 13
 #define DHT_TYPE DHT11
+#define LED_PIN 15
 
 AsyncWebServer server(80);
 LiquidCrystal_I2C lcd(0x27,16,2);
@@ -39,11 +40,13 @@ int start_point = 0;
 unsigned long lastWrite = 0;
 unsigned long lastLcd = 0;
 unsigned long lastStoricoWrite = 0;
+unsigned long buzz_start = 0;
 int REFRESH_RATE = 5000; // write dati.json every 5s
 int GRAPH_RATE = 60000;
 int g_count = 0;
 int MAX_MEM = 288;
 bool isOpenWifi = true;
+bool BuzzActivated = false;
 
 float hum=0;
 float temp=0;
@@ -53,7 +56,6 @@ float oldHum=0;
 float oldTemp=0;
 
 void connectWiFi();
-bool serveFromSD(AsyncWebServerRequest *);
 void aggiornaDati();
 String contentType(const String &filename);
 void salvaStorico();
@@ -72,21 +74,21 @@ void setup(){
 
 	SPI.begin(SCK_SD, MISO_SD, MOSI_SD, CS_SD);
 	if(!SD.begin(CS_SD,SPI)){
-		Serial.println("SD init failed. Check wiring and CS pin.");
+		Serial.println("Lettura SD fallita!");
 		lcd.setCursor(0,0);
 		lcd.print("Lettura SD fallita!");
 	}else{
 		lcd.setCursor(0,0);
 		lcd.print("Lettura SD riuscita!");
-		Serial.println("SD initialized.");
+		Serial.println("SD Aperta.");
 		connectWiFi();
 		// GET per leggere settings.json
 		server.on("/settings.json", HTTP_GET, [](AsyncWebServerRequest *request){
-		if(SD.exists("/settings.json")){
-			request->send(SD, "/settings.json", "application/json");
-		} else {
-			request->send(404, "application/json", "{}");
-		}
+			if(SD.exists("/settings.json")){
+				request->send(SD, "/settings.json", "application/json");
+			} else {
+				request->send(404, "application/json", "{}");
+			}
 		});
 		// POST per scrivere settings.json
 		server.on("/settings.json", HTTP_POST, [](AsyncWebServerRequest *request){},NULL,[](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
@@ -120,8 +122,8 @@ void setup(){
 		}
 		pinMode(POT_PIN,INPUT);
 		pinMode(BUZZ_PIN,OUTPUT);
+		pinMode(LED_PIN,OUTPUT);
 		dht.begin();
-
 		// Fornisce la pagina web
 		server.onNotFound([](AsyncWebServerRequest *request){
 			String path = request->url();
@@ -165,20 +167,48 @@ void loop(){
 	}
 	if(millis() - start_point>= 10000){
 		if(millis()-lastLcd >= 1000){
-		lastLcd=millis();
-		lcd.setCursor(0,0);
-		lcd.print("Umiditech  ");
-		String time=String(hour())+":"+String(minute());
-		lcd.print(time);
-		lcd.setCursor(0,1);
-		lcd.print("H:");
-		lcd.print((int)dht.readHumidity());
-		lcd.print("% , T:");
-		lcd.print(dht.readTemperature());
-		lcd.print("°    ");
+			lastLcd=millis();
+			lcd.setCursor(0,0);
+			lcd.print("Umiditech  ");
+			String time=String(hour())+":"+String(minute())+"  ";
+			lcd.print(time);
+			lcd.setCursor(0,1);
+			int h = dht.readHumidity();
+			float t = dht.readTemperature();
+			lcd.print("H:");
+			lcd.print(h);
+			lcd.print("% , T:");
+			lcd.print(t);
+			lcd.print("°    ");
+			if(isnan(h)){
+				h=0;
+				t=0;
+			}
+			if(h>65){
+				lcd.setCursor(0,0);
+				lcd.print("Soglia superata!   ");
+				lcd.setCursor(0,1);
+				lcd.print("H:");
+				lcd.print(h);
+				lcd.print("% , T:");
+				lcd.print(t);
+				lcd.print("°    ");
+				if(!BuzzActivated){
+					BuzzActivated=true;
+					buzz_start=millis();
+				}
+				digitalWrite(LED_PIN,HIGH);
+			}else{
+				BuzzActivated=false;
+				digitalWrite(LED_PIN,LOW);
+			}
+			if(millis()-buzz_start >= 3500){
+				analogWrite(BUZZ_PIN,0);
+			}else{
+				analogWrite(BUZZ_PIN,map(vol,0,100,0,255));
+			}
 		}
 	}
-
 }
 void generaStorico(){
 	if(SD.exists("/storico.json")){
