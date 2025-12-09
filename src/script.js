@@ -3,7 +3,7 @@ let charts = {};
 
 async function caricaDati(){
 	try{
-		const r = await fetch("dati.json", { cache: "no-store" });
+		const r = await fetch('dati.json', { cache: "no-store" });
 		const d = await r.json();
 
 		const H = document.getElementById("humidity");
@@ -19,22 +19,13 @@ async function caricaDati(){
         const Readstorico = await fetch('storico.json',{cache: 'no-store'});
         const storico = await Readstorico.json();
 
-        const ReadGRate = await fetch('settings.json',{cache: 'no-store'});
-        const GRate = await ReadGRate.json();
-
-        const GRateFrehs = Number(GRate.graph_rate);
-
-        let SixHourGraph = 360/GRateFrehs;
-
-        const ultime = storico.misurazioni.slice(-SixHourGraph);
-
-        const labels = ultime.map(x => x.time || ""); // mostra l’orario
+        const labels = storico.misurazioni.map(x => x.time || ""); // mostra l’orario
         
         charts.humidity.data.labels=labels;
-        charts.humidity.data.datasets[0].data = ultime.map(x => Number(x.umidita || 0));
+        charts.humidity.data.datasets[0].data = storico.misurazioni.map(x => Number(x.umidita || 0));
 
         charts.temperature.data.labels = labels;
-        charts.temperature.data.datasets[0].data = ultime.map(x => Number(x.temperatura || 0));
+        charts.temperature.data.datasets[0].data = storico.misurazioni.map(x => Number(x.temperatura || 0));
 
         charts.humidity.update();
         charts.temperature.update();
@@ -42,7 +33,6 @@ async function caricaDati(){
 		console.error("Errore lettura dati:", e);
 	}
 }
-
 // ---- WIFI ----
 async function caricaImpostazioni(){
 	try{
@@ -54,7 +44,6 @@ async function caricaImpostazioni(){
 		document.getElementById("graph_rate").value=w.graph_rate;
 	}catch(_){}
 }
-
 async function salvaWifi(e){
 	if(e){
 		e.preventDefault();
@@ -101,7 +90,25 @@ async function salvaWifi(e){
         if(st) st.textContent = "Download creato (settings.json)";
 	}
 }
+function escapeHTML(s) {
+    return s.replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;");
+}
+function formatLog(text){
+    text = escapeHTML(text);
+    return text
+        .replace(/WARNING/g, '<span class="log-warning">WARNING</span>')
+        .replace(/ERRORE/g, '<span class="log-error">ERRORE</span>')
+        .replace(/\d+/g, '<span class="log-num">$&</span>')
+        .replace(/INFO/g, '<span class="log-info">INFO</span>');
+}
+async function caricaLog(){
+    const logFile = await fetch('ESP32.log',{cache : 'no-store'});
+    const log = await logFile.text();
 
+    document.getElementById("output_log").innerHTML = formatLog(log);
+}
 (function(){
 
     function creaGrafico(idCanvas, label){
@@ -155,7 +162,7 @@ async function salvaWifi(e){
             if(!resp.ok) return;
             const d = await resp.json();
 
-            const first = storico.misurazioni[0];
+            const first = d.misurazioni[0];
 
             const valori = {
                 humidity: Number(first.umidita || 0),
@@ -181,7 +188,6 @@ async function salvaWifi(e){
     if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
     else start();
 })();
-
 function aggiornaKnob(volume){
     const pointer = document.getElementById("knobPointer");
     if(!pointer) return;
@@ -190,17 +196,30 @@ function aggiornaKnob(volume){
     const deg = -135 + (volume / 100) * 270;
     pointer.style.transform = `rotate(${deg}deg)`;
 }
-
 document.addEventListener("DOMContentLoaded",()=>{
 	const form = document.getElementById("settingsBox");
 	if(form) form.addEventListener("submit", salvaWifi);
 	caricaImpostazioni();
 	aggiorna();
-});
 
+    const titolo = document.getElementById("log_title");
+    const output = document.getElementById("output_log");
+
+    if(titolo && output){
+        titolo.style.cursor = "pointer"; // cambio cursore per indicare click
+        titolo.addEventListener("click", () => {
+            if(output.style.display === "none"){
+                output.style.display = "block";
+            } else {
+                output.style.display = "none";
+            }
+        });
+    }
+});
 async function aggiorna(){
 	while(true){
 		await caricaDati();
+        await caricaLog();
 		await new Promise(r=>setTimeout(r,REFRESH_RATE));
 	}
 }

@@ -33,6 +33,28 @@ h1.titolo{
 	text-align: center;
 	font-weight: lighter;
 }
+h2{
+	color: #0c373e;
+	font-size: 2rem;
+	font-family:'Panton', sans-serif;
+	text-align: center;
+	font-weight: lighter;
+}
+#output_log {
+	height: fit-content;
+    white-space: pre-wrap;
+	font-family:monospace;
+	background: #23272e;
+	color: #abb2b1;
+	padding: 1rem;
+	border-radius: 20px;
+}
+.log-log{
+	color: #c78851;
+}
+.log-warning{
+	color:#dfb468;
+}
 #grafico{
 	width: 400;
 	height: 200;
@@ -153,7 +175,6 @@ span.note:hover{
     background: #1f2d3d;
 	box-shadow: 0.1rem 0.3rem #2120204f;
 }
-
 #knobPointer {
     position: absolute;
     width: 5px;

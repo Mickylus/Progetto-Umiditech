@@ -61,6 +61,7 @@ String contentType(const String &filename);
 void salvaStorico();
 void caricaConfig();
 void generaStorico();
+void aggiornaLog(String);
 
 void setup(){
 	Serial.begin(115200);
@@ -78,10 +79,27 @@ void setup(){
 		lcd.setCursor(0,0);
 		lcd.print("Lettura SD fallita!");
 	}else{
+		if(SD.exists("/ESP32.log")){
+			SD.remove("/ESP32.log");
+		}
 		lcd.setCursor(0,0);
 		lcd.print("Lettura SD riuscita!");
 		Serial.println("SD Aperta.");
 		connectWiFi();
+		timeClient.begin();
+  		timeClient.update();
+  		// Imposto l'ora di TimeLib
+		if(isOpenWifi){
+  			setTime(timeClient.getEpochTime());
+		}else{
+			setTime(atoi(__TIME__),atoi(__TIME__+3),atoi(__TIME__+6),13,12,2025); // ore:minuti:secondi, giorno:mese:anno)
+		}
+		// Creo il file log
+		File LOG = SD.open("/ESP32.log",FILE_WRITE);
+		String log_time="["+String(day())+"/"+String(month())+"/"+String(year())+"-"+String(hour())+":"+String(minute())+":"+String(second())+"] ";
+		String log_message=log_time+"Avviato ESP32 - Umiditech\n"+log_time+"Inizializzata SD\n";
+		LOG.print(log_message);
+		LOG.close();
 		// GET per leggere settings.json
 		server.on("/settings.json", HTTP_GET, [](AsyncWebServerRequest *request){
 			if(SD.exists("/settings.json")){
@@ -110,16 +128,6 @@ void setup(){
 				request->send(500, "application/json", "{\"status\":\"error\"}");
 			}
 		});
-
-		timeClient.begin();
-  		timeClient.update();
-
-  		// Imposto l'ora di TimeLib
-		if(isOpenWifi){
-  			setTime(timeClient.getEpochTime());
-		}else{
-			setTime(atoi(__TIME__),atoi(__TIME__+3),atoi(__TIME__+6),13,12,2025); // ore:minuti:secondi, giorno:mese:anno)
-		}
 		pinMode(POT_PIN,INPUT);
 		pinMode(BUZZ_PIN,OUTPUT);
 		pinMode(LED_PIN,OUTPUT);
@@ -196,6 +204,7 @@ void loop(){
 				if(!BuzzActivated){
 					BuzzActivated=true;
 					buzz_start=millis();
+					aggiornaLog("WARNING : Soglia umidita superata");
 				}
 				digitalWrite(LED_PIN,HIGH);
 			}else{
@@ -227,6 +236,7 @@ void generaStorico(){
 	String newStoric = "{\"misurazioni\":[{\"umidita\":"+String(hum)+",\"temperatura\":"+String(temp)+",\"time\":"+timeStamp+"}]}";
 	f.print(newStoric);
 	f.close();
+	aggiornaLog("Inizializzato Storico");
 }
 // Scrive file sulla SD
 void writeFile(const char *path, const String &data) {
@@ -270,6 +280,10 @@ void salvaStorico(){
 	String add = ",{\"umidita\":"+String(hum)+",\"temperatura\":"+String(temp)+",\"time\":"+timeStamp+"}]}";
 	f.print(add);
 	f.close();
+
+	String qty = "["+String(g_count)+"/"+String(MAX_MEM)+"]";
+	String message = "Salvati dati su storico "+qty;
+	aggiornaLog(message);
 }
 
 void caricaConfig(){
@@ -298,6 +312,8 @@ void caricaConfig(){
 	GRAPH_RATE = raw.substring(graphStart,graphEnd).toInt();
 	MAX_MEM = 6*(60/GRAPH_RATE);
 	GRAPH_RATE *= 60000;
+
+	aggiornaLog("Caricate Impostazioni");
 }
 // Aiuta a caricare i file
 String contentType(const String &filename){
@@ -329,6 +345,14 @@ String contentType(const String &filename){
 		return "font/woff";
 	}
 	return "text/plain";
+}
+
+void aggiornaLog(String message){
+	String log_time="["+String(day())+"/"+String(month())+"/"+String(year())+"-"+String(hour())+":"+String(minute())+":"+String(second())+"] ";
+	File Log = SD.open("/ESP32.log",FILE_APPEND);
+	String log_message = log_time+message+"\n";
+	Log.print(log_message);
+	Log.close();
 }
 
 void aggiornaDati(){
@@ -412,7 +436,7 @@ bool readWifiConfig(String &ssid, String &password, String &d_ssid, String &d_pa
 }
 
 void connectWiFi(){
-	String ssid, password, d_ssid,d_password;
+	String ssid, password, d_ssid,d_password,log_message;
 	if(!readWifiConfig(ssid,password,d_ssid,d_password)){
 		Serial.println("Nessun WiFi configurato.");
 		return;
@@ -437,6 +461,7 @@ void connectWiFi(){
 		lcd.print("Connesso! IP:");
 		lcd.setCursor(0,1);
 		lcd.print(WiFi.localIP());
+		log_message="Connesso a "+ssid;
 	}else{
 		// Riprovo con il wifi di default
 		Serial.println("\nConnessione a " + ssid + " fallita!");
@@ -465,6 +490,7 @@ void connectWiFi(){
 			lcd.print("Connesso! IP:");
 			lcd.setCursor(0,1);
 			lcd.print(WiFi.localIP());
+			log_message="Connesso a "+d_ssid;
 		}else{
 			Serial.println("Connessione a " + d_ssid +" fallita!");
 			lcd.setCursor(0,0);
@@ -479,6 +505,8 @@ void connectWiFi(){
 			Serial.print("IP: ");
 			Serial.println(WiFi.localIP());
 			isOpenWifi=false;
+			log_message="Access point inizializzato!";
 		}
 	}
+	aggiornaLog(log_message);
 }
