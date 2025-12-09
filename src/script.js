@@ -24,9 +24,9 @@ async function caricaDati(){
 
         const GRateFrehs = Number(GRate.graph_rate);
 
-        let HourGraph = 1440/GRateFrehs;
+        let SixHourGraph = 360/GRateFrehs;
 
-        const ultime = storico.misurazioni.slice(-HourGraph);
+        const ultime = storico.misurazioni.slice(-SixHourGraph);
 
         const labels = ultime.map(x => x.time || ""); // mostra l’orario
         

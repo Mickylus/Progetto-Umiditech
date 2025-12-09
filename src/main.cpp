@@ -416,6 +416,9 @@ void connectWiFi(){
 		lcd.print("Wifi: ");
 		lcd.print(d_ssid);
 		lcd.print("    ");
+		if(d_ssid=="PC-Mighes"){
+			isOpenWifi=false;
+		}
 		Serial.println("Provo con il WiFi di default\n");
 		WiFi.mode(WIFI_STA);
 		WiFi.begin(d_ssid.c_str(), d_password.c_str());
@@ -432,9 +435,20 @@ void connectWiFi(){
 			lcd.print("Connesso! IP:");
 			lcd.setCursor(0,1);
 			lcd.print(WiFi.localIP());
-			isOpenWifi=false;
 		}else{
 			Serial.println("Connessione a " + d_ssid +" fallita!");
+			lcd.setCursor(0,0);
+			lcd.print("Inizio AP      ");
+			WiFi.mode(WIFI_AP_STA);
+			WiFi.softAP("ESP32-Umiditech","12345678");
+			lcd.setCursor(0,0);
+			lcd.print("Connesso AP, IP: ");
+			lcd.setCursor(0,1);
+			lcd.print(WiFi.localIP());
+			Serial.println("Wifi AP iniziato: ");
+			Serial.print("IP: ");
+			Serial.println(WiFi.localIP());
+			isOpenWifi=false;
 		}
 	}
 }
