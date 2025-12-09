@@ -109,6 +109,15 @@ var{
 	box-shadow:0rem 0.3rem #0404040c;
 	z-index: 99999;
 }
+#esp32icon{
+	width: 35px;
+	height: auto;
+	display: block;
+}
+#iconBox{
+	text-align: left;
+	margin: 0;
+}
 #but_cen{
 	text-align: center;
 }
