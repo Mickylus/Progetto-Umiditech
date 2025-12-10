@@ -10,6 +10,7 @@
 #include <DHT.h>
 #include <NTPClient.h>
 #include <WiFiUdp.h>
+#include <ArduinoJson.h>
 
 
 // Pin SD
@@ -251,23 +252,32 @@ void setupServer(){
 }
 // Genera l'inizio del file storico.json
 void generaStorico(){
-	if(SD.exists("/storico.json")){
-		SD.remove("/storico.json");
-	}
-	float h = dht.readHumidity();
-	float t = dht.readTemperature();
-	if(!isnan(h)){
+	if(SD.exists("/storico.json")) {
+        SD.remove("/storico.json");
+    }
+
+    float h = dht.readHumidity();
+    float t = dht.readTemperature();
+
+    if(!isnan(h)){
 		hum=h;
-	}
-	if(!isnan(t)){
 		temp=t;
 	}
-	File f = SD.open("/storico.json",FILE_WRITE);
-	String timeStamp = "\""+String(hour())+":"+String(minute())+":"+String(second())+"\"";
-	String newStoric = "{\"misurazioni\":[{\"umidita\":"+String(hum)+",\"temperatura\":"+String(temp)+",\"time\":"+timeStamp+"}]}";
-	f.print(newStoric);
-	f.close();
-	aggiornaLog("Inizializzato Storico");
+    DynamicJsonDocument doc(256);
+    // Creo array "misurazioni"
+    JsonArray misurazioni = doc.createNestedArray("misurazioni");
+    // Aggiungo la prima misurazione
+    JsonObject entry = misurazioni.createNestedObject();
+    entry["umidita"]     = hum;
+    entry["temperatura"] = temp;
+    entry["time"]        = String(hour()) + ":" + String(minute()) + ":" + String(second());
+    // Scrivo JSON sulla SD
+    File f = SD.open("/storico.json", FILE_WRITE);
+    if(f){
+        serializeJson(doc, f);
+        f.close();
+    }
+    aggiornaLog("Inizializzato Storico");
 }
 // Scrive file sulla SD
 void writeFile(const char *path, const String &data) {
@@ -284,67 +294,70 @@ void salvaStorico(){
 	if(!SD.exists("/storico.json")){
 		return;
 	}
-	File f = SD.open("/storico.json",FILE_READ);
-	String s = f.readString();
-	f.close();
+    File f = SD.open("/storico.json", FILE_READ);
+    if (!f) return;
 
-	s.remove(s.length()-2);
+    DynamicJsonDocument doc(1024);
+    DeserializationError err = deserializeJson(doc, f);
+    f.close();
+    if (err) return;
 
-	float h=dht.readHumidity();
-	float t=dht.readTemperature();
-	
-	if(!isnan(h)){
+    float h = dht.readHumidity();
+    float t = dht.readTemperature();
+
+    if(!isnan(h)){
 		hum=h;
 		oldHum=hum;
-	}else{
-		hum=oldHum;
-	}
-	if(!isnan(t)){
 		temp=t;
 		oldTemp=temp;
 	}else{
+		hum=oldHum;
 		temp=oldTemp;
 	}
-	f = SD.open("/storico.json",FILE_WRITE);
-	f.print(s);
-	String timeStamp = "\""+String(hour())+":"+String(minute())+":"+String(second())+"\"";
-	String add = ",{\"umidita\":"+String(hum)+",\"temperatura\":"+String(temp)+",\"time\":"+timeStamp+"}]}";
-	f.print(add);
-	f.close();
 
-	String qty = "["+String(g_count)+"/"+String(MAX_MEM)+"]";
-	String message = "Salvati dati su storico "+qty;
-	aggiornaLog(message);
+    // Aggiungo nuova misurazione
+    JsonArray misurazioni = doc["misurazioni"];
+    JsonObject entry = misurazioni.createNestedObject();
+    entry["umidita"] = hum;
+    entry["temperatura"] = temp;
+    entry["time"] = String(hour()) + ":" + String(minute()) + ":" + String(second());
+
+    // Riscrivo tutto il JSON
+    f = SD.open("/storico.json", FILE_WRITE);
+    if(f){
+        serializeJson(doc, f);
+        f.close();
+    }
+
+    String qty = "[" + String(g_count) + "/" + String(MAX_MEM) + "]";
+    String message = "Salvati dati su storico " + qty;
+    aggiornaLog(message);
 }
 // Carica le impostazioni
 void caricaConfig(){
 	if(!SD.exists("/settings.json")){
+        return;
+    }
+    File f = SD.open("/settings.json", FILE_READ);
+    if(!f){
 		return;
 	}
-	File f = SD.open("/settings.json",FILE_READ);
-	String raw = f.readString();
-	f.close();
-
-	raw.replace("\n","");
-	raw.replace("\r","");
-	raw.replace(" ","");
-
-	int refreshStart = raw.indexOf("\"refresh_rate\":");
-	int graphStart = raw.indexOf("\"graph_rate\":");
-
-	refreshStart+=15;
-	graphStart+=13;
-
-	int refreshEnd = raw.indexOf(",",refreshStart);
-	int graphEnd = raw.indexOf("}",graphStart);
-
-	REFRESH_RATE = raw.substring(refreshStart,refreshEnd).toInt();
-	REFRESH_RATE *= 1000;
-	GRAPH_RATE = raw.substring(graphStart,graphEnd).toInt();
-	MAX_MEM = 6*(60/GRAPH_RATE);
-	GRAPH_RATE *= 60000;
-
-	aggiornaLog("Caricate Impostazioni");
+    DynamicJsonDocument doc(256);
+    DeserializationError err = deserializeJson(doc, f);
+    f.close();
+    if(err){
+        Serial.print("Errore parsing JSON: ");
+        Serial.println(err.c_str());
+        return;
+    }
+    // Lettura dei valori
+    REFRESH_RATE = doc["refresh_rate"].as<int>();
+    GRAPH_RATE   = doc["graph_rate"].as<int>();
+    // Conversioni come prima
+    REFRESH_RATE *= 1000;              // da secondi a millisecondi
+    GRAPH_RATE *= 60000;             // da minuti a millisecondi
+    MAX_MEM = 6 * (60 / (GRAPH_RATE / 60000)); // MAX_MEM calcolato in base al nuovo GRAPH_RATE
+    aggiornaLog("Caricate Impostazioni");
 }
 // Aiuta a caricare i file
 String contentType(const String &filename){
@@ -387,40 +400,43 @@ void aggiornaLog(String message){
 }
 // Aggiorna i valori salvati su dati.json
 void aggiornaDati(){
-	int val=analogRead(POT_PIN);
-	Serial.println(val);
-	vol=map(val,50,4000,0,100);
-	float h=dht.readHumidity();
-	float t=dht.readTemperature();
-	Serial.print("DHT 11 | Umidità:");
-	Serial.print(h);
-	Serial.print("% - Temperatura: ");
-	Serial.print(t);
-	Serial.println("°");
-	if(!isnan(h)){
-		hum=h;
-		oldHum=hum;
-	}else{
+    int val = analogRead(POT_PIN);
+    Serial.println(val);
+    vol = map(val, 50, 4000, 0, 100);
+    float h = dht.readHumidity();
+    float t = dht.readTemperature();
+    Serial.print("DHT 11 | Umidità: ");
+    Serial.print(h);
+    Serial.print("% - Temperatura: ");
+    Serial.print(t);
+    Serial.println("°");
+    // Se i valori sono validi li uso, altrimenti metto 0
+    if(isnan(h)){
 		hum=0;
-	}
-	if(!isnan(t)){
-		temp=t;
-		oldTemp=temp;
 	}else{
+		hum=h;
+	}
+    if(isnan(t)){
 		temp=0;
+	}else{
+		temp=t;
 	}
-	if(vol>100){
-		vol=100;
+	if(hum!=0){
+		oldHum = hum;
+    	oldTemp = temp;
 	}
-	if(vol<0){
-		vol=0;
-	}
-	String json = "{";
-	json += "\"umidita\":" + String(hum) + ",";
-	json += "\"temperatura\":" + String(temp) + ",";
-	json += "\"volume\":" + String(vol);
-	json += "}";
-	writeFile("/dati.json", json);
+    // Limito tra 0 e 100
+    vol = constrain(vol, 0, 100);
+    // ---- ArduinoJson ----
+    DynamicJsonDocument doc(256);
+    doc["umidita"] = hum;
+    doc["temperatura"] = temp;
+    doc["volume"] = vol;
+    // Serializzo il JSON
+    String json;
+    serializeJson(doc, json);
+    // Salvo nel file
+    writeFile("/dati.json", json);
 }
 // Legge le impostazioni del wifi
 bool readWifiConfig(String &ssid, String &password, String &d_ssid, String &d_password){
@@ -433,36 +449,17 @@ bool readWifiConfig(String &ssid, String &password, String &d_ssid, String &d_pa
 		Serial.println("Impossibile aprire settings.json");
 		return false;
 	}
-
-	String raw = f.readString();
+	DynamicJsonDocument doc(256);
+	DeserializationError err = deserializeJson(doc, f);
 	f.close();
 
-	raw.replace("\n", "");
-	raw.replace("\r", "");
-	raw.replace(" ", "");
-
-	int ssidStart = raw.indexOf("\"ssid\":\"");
-	int passStart = raw.indexOf("\"password\":\"");
-	int dssidStart = raw.indexOf("\"d_ssid\":\"");
-	int dpassStart = raw.indexOf("\"d_password\":\"");
-
-	if (ssidStart < 0 || passStart < 0 || dssidStart < 0 || dpassStart < 0){
+	if(err){
 		return false;
 	}
-	ssidStart += 8;  // salto "ssid":"  
-	passStart += 12; // salto "password":" 
-	dssidStart += 10;
-	dpassStart += 14;
-
-	int ssidEnd = raw.indexOf("\"", ssidStart);
-	int passEnd = raw.indexOf("\"", passStart);
-	int dssisEnd = raw.indexOf("\"", dssidStart);
-	int dpassEnd = raw.indexOf("\"", dpassStart);
-
-	ssid = raw.substring(ssidStart, ssidEnd);
-	password = raw.substring(passStart, passEnd);
-	d_ssid = raw.substring(dssidStart,dssisEnd);
-	d_password = raw.substring(dpassStart,dpassEnd);
+	ssid = doc["ssid"].as<String>();
+	password = doc["password"].as<String>();
+	d_ssid = doc["d_ssid"].as<String>();
+	d_password = doc["d_password"].as<String>();
 	return true;
 }
 // Si connette alle varie reti wifi

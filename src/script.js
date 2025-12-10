@@ -123,11 +123,26 @@ async function caricaLog(){
 			datasets: [{
 				label: label,
 				data: [0],
-				backgroundColor: ['#556c87ff'],
-				borderColor: ['#2163aeff'],
-				borderWidth: 3,
-				tension: 0,
-				pointRadius: 4
+				backgroundColor: function(ctx){
+					if(ctx.dataset.label === 'Umidità'){
+						return 'rgba(70, 110, 117, 0.963)';
+					}else{
+						return 'rgba(117, 70, 70, 0.96)';
+					}
+				},
+//				backgroundColor: ['rgba(70, 110, 117, 0.963)'],
+				borderColor: function(ctx){
+					if(ctx.dataset.label === 'Umidità'){
+						return 'rgba(70, 110, 117, 0.963)';
+					}else{
+						return 'rgba(117, 70, 70, 0.96)';
+					}
+				},
+//				borderColor: ['rgba(70, 110, 117, 0.963)'],
+				borderWidth: 2,
+				tension: 0.25,
+				pointRadius: 1,
+				hitRadius: 20
 			}]
 		};
 
