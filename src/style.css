@@ -16,6 +16,18 @@
 	font-weight: normal;
 	font-style: normal;
 }
+@font-face{
+	font-family: 'InterPhase';
+	src: url('fonts/tt_interphases_pro/TT-Interphases-Pro-Trial-Bold.woff') format('woff');
+	font-weight: normal;
+	font-style: normal;
+}
+@font-face{
+	font-family: 'Creato';
+	src: url('fonts/creato_display/CreatoDisplay-Bold.otf') format('otf');
+	font-weight: normal;
+	font-style: normal;
+}
 body{
 	background: rgb(218, 217, 217);
 	color: #212020;
@@ -115,6 +127,14 @@ a{
 #menu a{
 	margin-left: 2rem;
 }
+.esp32-icon{
+	width: auto;
+	height: 150%;
+	margin-right: 0.5rem;
+}
+.gif{
+	margin-right: auto;
+}
 var{
 	font-weight: bold;
 	font-style: normal;
@@ -130,6 +150,7 @@ var{
 	font-size: 1.2rem;
 	box-shadow:0rem 0.3rem #0404040c;
 	z-index: 99999;
+	display: flex;
 }
 #esp32icon{
 	width: 35px;
@@ -188,6 +209,9 @@ span.note:hover{
 	border-radius: 4rem;
 	box-shadow: 0.1rem 0.2rem rgb(90, 28, 28);
 }
+hr.fine-pagina{
+	margin-top: 10rem;
+}
 input{
 	background: #ffffff;
 	border-radius: 2rem;
@@ -239,8 +263,6 @@ div.small_input{
 	box-shadow:0.2rem 0.2rem #2120201d;
 	padding:3rem;
 }
-
-/* Form layout helpers */
 .form-row{
 	display: flex;
 	align-items: center;
