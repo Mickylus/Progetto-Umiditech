@@ -36,22 +36,25 @@ DHT dht(DHT_PIN,DHT_TYPE);
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, "pool.ntp.org", 3600*1); // offset in secondi (qui +1 ora)
 
-int start_point = 0;
+// Variabili di tempo
 unsigned long lastWrite = 0;
 unsigned long lastLcd = 0;
 unsigned long lastStoricoWrite = 0;
 unsigned long buzz_start = 0;
+// Variabili contatori
+int start_point = 0;
 int REFRESH_RATE = 5000; // write dati.json every 5s
 int GRAPH_RATE = 60000;
 int g_count = 0;
 int MAX_MEM = 288;
+// Variabili di Stato
 bool isOpenWifi = true;
 bool BuzzActivated = false;
-
+bool SDfailed = false;
+// Variabili sensori
 float hum=0;
 float temp=0;
 int vol=0;
-
 float oldHum=0;
 float oldTemp=0;
 
@@ -62,132 +65,77 @@ void salvaStorico();
 void caricaConfig();
 void generaStorico();
 void aggiornaLog(String);
+void setupServer();
 
 void setup(){
 	Serial.begin(115200);
 	Wire.begin(LCD_SDA,LCD_SCL);
-
 	lcd.init();
 	lcd.backlight();
-	lcd.setCursor(0,0);
-	lcd.print("Caricamento wifi...");
-	Serial.println("Starting ESP32 Async SD server");
+	dht.begin();
 
+	Serial.println("Avvio progetto Umiditech");
+	lcd.setCursor(0,0);
+	lcd.print("Avvio in corso..");
+	lcd.setCursor(0,1);
+	lcd.print("Caricamento...  ");
+
+	pinMode(POT_PIN,INPUT);
+	pinMode(BUZZ_PIN,OUTPUT);
+	pinMode(LED_PIN,OUTPUT);
 	SPI.begin(SCK_SD, MISO_SD, MOSI_SD, CS_SD);
 	if(!SD.begin(CS_SD,SPI)){
 		Serial.println("Lettura SD fallita!");
 		lcd.setCursor(0,0);
-		lcd.print("Lettura SD fallita!");
-	}else{
-		if(SD.exists("/ESP32.log")){
-			SD.remove("/ESP32.log");
-		}
-		lcd.setCursor(0,0);
-		lcd.print("Lettura SD riuscita!");
-		Serial.println("SD Aperta.");
-		connectWiFi();
+		lcd.print("ERRORE:         ");
+		lcd.setCursor(0,1);
+		lcd.print("SD error        ");
 		timeClient.begin();
   		timeClient.update();
-  		// Imposto l'ora di TimeLib
-		if(isOpenWifi){
-  			setTime(timeClient.getEpochTime());
-		}else{
-			setTime(atoi(__TIME__),atoi(__TIME__+3),atoi(__TIME__+6),13,12,2025); // ore:minuti:secondi, giorno:mese:anno)
-		}
-		// Creo il file log
-		File LOG = SD.open("/ESP32.log",FILE_WRITE);
-		String log_time="["+String(day())+"/"+String(month())+"/"+String(year())+"-"+String(hour())+":"+String(minute())+":"+String(second())+"] ";
-		String log_message=log_time+"Avviato ESP32 - Umiditech\n"+log_time+"Inizializzata SD\n";
-		LOG.print(log_message);
-		LOG.close();
-		// GET per leggere settings.json
-		server.on("/settings.json", HTTP_GET, [](AsyncWebServerRequest *request){
-			if(SD.exists("/settings.json")){
-				request->send(SD, "/settings.json", "application/json");
-			} else {
-				request->send(404, "application/json", "{}");
-			}
-		});
-		// POST per scrivere settings.json
-		server.on("/settings.json", HTTP_POST, [](AsyncWebServerRequest *request){},NULL,[](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
-			File f = SD.open("/settings.json", FILE_WRITE);
-			if(f){
-				f.write(data, len);
-				f.close();
-				caricaConfig();
-				lcd.setCursor(0,0);
-				lcd.print("Nuove Impostazioni:");
-				lcd.setCursor(0,1);
-				lcd.print("Rr: ");
-				lcd.print(REFRESH_RATE/1000);
-				lcd.print(" Gr: ");
-				lcd.print(GRAPH_RATE/60000);
-				lcd.print("     ");
-				request->send(200, "application/json", "{\"status\":\"ok\"}");
-			} else {
-				request->send(500, "application/json", "{\"status\":\"error\"}");
-			}
-		});
-		pinMode(POT_PIN,INPUT);
-		pinMode(BUZZ_PIN,OUTPUT);
-		pinMode(LED_PIN,OUTPUT);
-		dht.begin();
-		// Fornisce la pagina web
-		server.onNotFound([](AsyncWebServerRequest *request){
-			String path = request->url();
-			if(path.endsWith("/")) path += "index.html"; 
-			if(SD.exists(path)){
-				AsyncWebServerResponse *response = request->beginResponse(SD, path, contentType(path));
-				response->addHeader("Cache-Control", "max-age=3600"); // cache per 1 ora
-				request->send(response);
-			} else {
-				request->send(404, "text/plain", "File Not Found");
-			}
-		});
-		server.begin();
-		Serial.println("HTTP server started");
-		caricaConfig();
-		generaStorico();
+		setTime(atoi(__TIME__),atoi(__TIME__+3),atoi(__TIME__+6),13,12,2025); // ore:minuti:secondi, giorno:mese:anno)
+		isOpenWifi=false;
+		SDfailed=true;
+	}else{
+		setupServer();
+		start_point=millis();
 	}
-	start_point=millis();
 }
 
 void loop(){
-	// Aggiorno i dati ogni 2 secondi se sono cambiati per evitare l'usura della microSD
-	if (millis() - lastWrite >= REFRESH_RATE) {
-		lastWrite = millis();
-		aggiornaDati();
-	}
-	if(millis()-lastStoricoWrite >= GRAPH_RATE){
-		if(isOpenWifi){
-			if(timeClient.update()){
-				setTime(timeClient.getEpochTime());
+	if(!SDfailed){
+		// Aggiorno i dati ogni 2 secondi se sono cambiati per evitare l'usura della microSD
+		if (millis() - lastWrite >= REFRESH_RATE) {
+			lastWrite = millis();
+			aggiornaDati();
+		}
+		if(millis()-lastStoricoWrite >= GRAPH_RATE){
+			if(isOpenWifi){
+				if(timeClient.update()){
+					setTime(timeClient.getEpochTime());
+				}
 			}
+			lastStoricoWrite=millis();
+			if(g_count>=MAX_MEM){
+				generaStorico();
+				g_count=0;
+			}else{
+				salvaStorico();
+			}
+			g_count++;
 		}
-		lastStoricoWrite=millis();
-		if(g_count>=MAX_MEM){
-			generaStorico();
-			g_count=0;
-		}else{
-			salvaStorico();
-		}
-		g_count++;
 	}
 	if(millis() - start_point>= 10000){
 		if(millis()-lastLcd >= 1000){
 			lastLcd=millis();
-			lcd.setCursor(0,0);
-			lcd.print("Umiditech  ");
-			String time=String(hour())+":"+String(minute())+"  ";
-			lcd.print(time);
-			lcd.setCursor(0,1);
-			int h = dht.readHumidity();
+			float h = dht.readHumidity();
 			float t = dht.readTemperature();
-			lcd.print("H:");
-			lcd.print(h);
-			lcd.print("% , T:");
-			lcd.print(t);
-			lcd.print("°    ");
+			float val=analogRead(BUZZ_PIN);
+			vol=map(val,100,4000,0,100);
+			if(vol<0){
+				vol=0;
+			}else if(vol>100){
+				vol=100;
+			}
 			if(isnan(h)){
 				h=0;
 				t=0;
@@ -196,20 +144,34 @@ void loop(){
 				lcd.setCursor(0,0);
 				lcd.print("Soglia superata!   ");
 				lcd.setCursor(0,1);
-				lcd.print("H:");
-				lcd.print(h);
-				lcd.print("% , T:");
+				lcd.print("U: ");
+				lcd.print((int)h);
+				lcd.print("% T: ");
 				lcd.print(t);
-				lcd.print("°    ");
+				lcd.print("°");
 				if(!BuzzActivated){
 					BuzzActivated=true;
 					buzz_start=millis();
-					aggiornaLog("WARNING : Soglia umidita superata");
 				}
 				digitalWrite(LED_PIN,HIGH);
 			}else{
 				BuzzActivated=false;
 				digitalWrite(LED_PIN,LOW);
+				lcd.setCursor(0,0);
+				lcd.print("Umiditech  ");
+				String time=String(hour())+":";
+				if(minute()<10){
+					time=time+"0"+String(minute())+" ";
+				}else{
+					time=time+String(minute())+"";
+				}
+				lcd.print(time);
+				lcd.setCursor(0,1);
+				lcd.print("U: ");
+				lcd.print((int)h);
+				lcd.print("% T: ");
+				lcd.print(t);
+				lcd.print("°");
 			}
 			if(millis()-buzz_start >= 3500){
 				analogWrite(BUZZ_PIN,0);
@@ -219,6 +181,75 @@ void loop(){
 		}
 	}
 }
+// inizializza il server
+void setupServer(){
+	if(SD.exists("/ESP32.log")){
+		SD.remove("/ESP32.log");
+	}
+	lcd.setCursor(0,0);
+	lcd.print("Lettura SD riuscita!");
+	Serial.println("SD Aperta.");
+	connectWiFi();
+	timeClient.begin();
+  	timeClient.update();
+  	// Imposto l'ora di TimeLib
+	if(isOpenWifi){
+  		setTime(timeClient.getEpochTime());
+	}else{
+		setTime(atoi(__TIME__),atoi(__TIME__+3),atoi(__TIME__+6),13,12,2025); // ore:minuti:secondi, giorno:mese:anno)
+	}
+	// Creo il file log
+	File LOG = SD.open("/ESP32.log",FILE_WRITE);
+	String log_time="["+String(day())+"/"+String(month())+"/"+String(year())+"-"+String(hour())+":"+String(minute())+":"+String(second())+"] ";
+	String log_message=log_time+"Avviato ESP32 - Umiditech\n"+log_time+"Inizializzata SD\n";
+	LOG.print(log_message);
+	LOG.close();
+	// GET per leggere settings.json
+	server.on("/settings.json", HTTP_GET, [](AsyncWebServerRequest *request){
+		if(SD.exists("/settings.json")){
+			request->send(SD, "/settings.json", "application/json");
+		} else {
+			request->send(404, "application/json", "{}");
+		}
+	});
+	// POST per scrivere settings.json
+	server.on("/settings.json", HTTP_POST, [](AsyncWebServerRequest *request){},NULL,[](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
+		File f = SD.open("/settings.json", FILE_WRITE);
+		if(f){
+			f.write(data, len);
+			f.close();
+			caricaConfig();
+			lcd.setCursor(0,0);
+			lcd.print("Nuove Impostazioni:");
+			lcd.setCursor(0,1);
+			lcd.print("Rr: ");
+			lcd.print(REFRESH_RATE/1000);
+			lcd.print(" Gr: ");
+			lcd.print(GRAPH_RATE/60000);
+			lcd.print("     ");
+			request->send(200, "application/json", "{\"status\":\"ok\"}");
+		} else {
+			request->send(500, "application/json", "{\"status\":\"error\"}");
+		}
+	});
+	// Fornisce la pagina web
+	server.onNotFound([](AsyncWebServerRequest *request){
+		String path = request->url();
+		if(path.endsWith("/")) path += "index.html"; 
+		if(SD.exists(path)){
+			AsyncWebServerResponse *response = request->beginResponse(SD, path, contentType(path));
+			response->addHeader("Cache-Control", "max-age=3600"); // cache per 1 ora
+			request->send(response);
+		} else {
+			request->send(404, "text/plain", "File Not Found");
+		}
+	});
+	server.begin();
+	Serial.println("HTTP server started");
+	caricaConfig();
+	generaStorico();
+}
+// Genera l'inizio del file storico.json
 void generaStorico(){
 	if(SD.exists("/storico.json")){
 		SD.remove("/storico.json");
@@ -248,7 +279,7 @@ void writeFile(const char *path, const String &data) {
 	f.print(data);
 	f.close();
 }
-
+// Salva i dati su storico.json per i grafici
 void salvaStorico(){
 	if(!SD.exists("/storico.json")){
 		return;
@@ -285,7 +316,7 @@ void salvaStorico(){
 	String message = "Salvati dati su storico "+qty;
 	aggiornaLog(message);
 }
-
+// Carica le impostazioni
 void caricaConfig(){
 	if(!SD.exists("/settings.json")){
 		return;
@@ -346,7 +377,7 @@ String contentType(const String &filename){
 	}
 	return "text/plain";
 }
-
+// Aggiorna il log
 void aggiornaLog(String message){
 	String log_time="["+String(day())+"/"+String(month())+"/"+String(year())+"-"+String(hour())+":"+String(minute())+":"+String(second())+"] ";
 	File Log = SD.open("/ESP32.log",FILE_APPEND);
@@ -354,7 +385,7 @@ void aggiornaLog(String message){
 	Log.print(log_message);
 	Log.close();
 }
-
+// Aggiorna i valori salvati su dati.json
 void aggiornaDati(){
 	int val=analogRead(POT_PIN);
 	Serial.println(val);
@@ -391,7 +422,7 @@ void aggiornaDati(){
 	json += "}";
 	writeFile("/dati.json", json);
 }
-
+// Legge le impostazioni del wifi
 bool readWifiConfig(String &ssid, String &password, String &d_ssid, String &d_password){
 	if(!SD.exists("/settings.json")){
 		Serial.println("settings.json non trovato");
@@ -434,7 +465,7 @@ bool readWifiConfig(String &ssid, String &password, String &d_ssid, String &d_pa
 	d_password = raw.substring(dpassStart,dpassEnd);
 	return true;
 }
-
+// Si connette alle varie reti wifi
 void connectWiFi(){
 	String ssid, password, d_ssid,d_password,log_message;
 	if(!readWifiConfig(ssid,password,d_ssid,d_password)){
