@@ -381,34 +381,34 @@ void caricaConfig(){
 }
 // Aiuta a caricare i file del server
 String contentType(const String &filename){
-	if(filename.endsWith(".htm") || filename.endsWith(".html")){
-		return "text/html";
-	}
-	if(filename.endsWith(".css")){
-		return "text/css";
-	}
-	if(filename.endsWith(".js")){
-		return "application/javascript";
-	}
-	if(filename.endsWith(".json")){
-		return "application/json";
-	}
-	if(filename.endsWith(".png")){
-		return "image/png";
-	}
-	if (filename.endsWith(".jpg") || filename.endsWith(".jpeg")){
-		return "image/jpeg";
-	}
-	if (filename.endsWith(".ico")){
-		return "image/x-icon";
-	}
-	if(filename.endsWith(".ttf")){
-		return "font/ttf";
-	}
-	if(filename.endsWith(".woff")){
-		return "font/woff";
-	}
-	return "text/plain";
+    if(filename.endsWith(".htm") || filename.endsWith(".html")){
+        return "text/html; charset=utf-8";
+    }
+    if(filename.endsWith(".css")){
+        return "text/css; charset=utf-8";
+    }
+    if(filename.endsWith(".js")){
+        return "application/javascript; charset=utf-8";
+    }
+    if(filename.endsWith(".json")){
+        return "application/json; charset=utf-8";
+    }
+    if(filename.endsWith(".png")){
+        return "image/png";
+    }
+    if (filename.endsWith(".jpg") || filename.endsWith(".jpeg")){
+        return "image/jpeg";
+    }
+    if (filename.endsWith(".ico")){
+        return "image/x-icon";
+    }
+    if(filename.endsWith(".ttf")){
+        return "font/ttf";
+    }
+    if(filename.endsWith(".woff")){
+        return "font/woff";
+    }
+    return "text/plain; charset=utf-8";
 }
 // Aggiorna il log
 void aggiornaLog(String message){
