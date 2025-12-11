@@ -23,7 +23,7 @@
 #define LCD_SDA 21
 // Pin Sensori
 #define POT_PIN 34
-#define BUZZ_PIN 27
+#define BUZZ_PIN 14
 #define DHT_PIN 13
 #define DHT_TYPE DHT11
 #define LED_PIN 15
@@ -37,27 +37,45 @@ DHT dht(DHT_PIN,DHT_TYPE);
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, "pool.ntp.org", 3600*1); // offset in secondi (qui +1 ora)
 
-// Variabili di tempo
+/*Variabili di tempo*/
+// Ultima scrittura dati
 unsigned long lastWrite = 0;
+// Ultima stampa su LCD
 unsigned long lastLcd = 0;
+// Ultima scrittura grafico
 unsigned long lastStoricoWrite = 0;
+// Tempo di inizio del suono del buzzer
 unsigned long buzz_start = 0;
-// Variabili contatori
+/*Variabili contatori*/
+// Segna l'inizio ufficiale del programma (fuori dal setup)
 int start_point = 0;
-int REFRESH_RATE = 5000; // write dati.json every 5s
+// Periodo di scrittura dati
+int REFRESH_RATE = 5000;
+// Periodo di scrittura grafico
 int GRAPH_RATE = 60000;
+// Conteggio scrittura grafico
 int g_count = 0;
+// Massima grandezza grafico
 int MAX_MEM = 288;
-// Variabili di Stato
+/* Variabili di Stato*/
+// Stabilisce se il WiFi è normale o hotspot (non ha accesso al'ora)
 bool isOpenWifi = true;
+// Stabilisce se il buzzer ha suonato o no
 bool BuzzActivated = false;
+// Stabilisce se il lettore SD funziona correttamente
 bool SDfailed = false;
-// Variabili sensori
+/*Variabili sensori*/
+// Umidità (DHT 11)
 float hum=0;
+// Temperatura (DHT 11)
 float temp=0;
+// Volume (Potenziometro)
 int vol=0;
+// Vecchia Umidità
 float oldHum=0;
+// Vecchia temperatura
 float oldTemp=0;
+/*Funzioni*/
 
 void connectWiFi();
 void aggiornaDati();
@@ -69,18 +87,19 @@ void aggiornaLog(String);
 void setupServer();
 
 void setup(){
+	// Inizializzo i componenti & porta seriale
 	Serial.begin(115200);
 	Wire.begin(LCD_SDA,LCD_SCL);
 	lcd.init();
 	lcd.backlight();
 	dht.begin();
-
+	// Avvio progetto
 	Serial.println("Avvio progetto Umiditech");
 	lcd.setCursor(0,0);
 	lcd.print("Avvio in corso..");
 	lcd.setCursor(0,1);
 	lcd.print("Caricamento...  ");
-
+	// Stabilisco se INPUT/OUTPUT
 	pinMode(POT_PIN,INPUT);
 	pinMode(BUZZ_PIN,OUTPUT);
 	pinMode(LED_PIN,OUTPUT);
@@ -91,9 +110,8 @@ void setup(){
 		lcd.print("ERRORE:         ");
 		lcd.setCursor(0,1);
 		lcd.print("SD error        ");
-		timeClient.begin();
-  		timeClient.update();
-		setTime(atoi(__TIME__),atoi(__TIME__+3),atoi(__TIME__+6),13,12,2025); // ore:minuti:secondi, giorno:mese:anno)
+		//			    ORE			 MINUTI			  SECONDI
+		setTime(atoi(__TIME__),atoi(__TIME__+3),atoi(__TIME__+6),13,12,2025);
 		isOpenWifi=false;
 		SDfailed=true;
 	}else{
@@ -103,6 +121,7 @@ void setup(){
 }
 
 void loop(){
+	// Scrittura dati server
 	if(!SDfailed){
 		// Aggiorno i dati ogni 2 secondi se sono cambiati per evitare l'usura della microSD
 		if (millis() - lastWrite >= REFRESH_RATE) {
@@ -125,12 +144,13 @@ void loop(){
 			g_count++;
 		}
 	}
+	// Scrittura LCD
 	if(millis() - start_point>= 10000){
 		if(millis()-lastLcd >= 1000){
 			lastLcd=millis();
 			float h = dht.readHumidity();
 			float t = dht.readTemperature();
-			float val=analogRead(BUZZ_PIN);
+			float val=analogRead(POT_PIN);
 			vol=map(val,100,4000,0,100);
 			if(vol<0){
 				vol=0;
@@ -359,7 +379,7 @@ void caricaConfig(){
     MAX_MEM = 6 * (60 / (GRAPH_RATE / 60000)); // MAX_MEM calcolato in base al nuovo GRAPH_RATE
     aggiornaLog("Caricate Impostazioni");
 }
-// Aiuta a caricare i file
+// Aiuta a caricare i file del server
 String contentType(const String &filename){
 	if(filename.endsWith(".htm") || filename.endsWith(".html")){
 		return "text/html";
@@ -486,7 +506,7 @@ void connectWiFi(){
 		Serial.print("IP: ");
 		Serial.println(WiFi.localIP());
 		lcd.setCursor(0,0);
-		lcd.print("Connesso! IP:");
+		lcd.print("Connesso! IP:      ");
 		lcd.setCursor(0,1);
 		lcd.print(WiFi.localIP());
 		log_message="Connesso a "+ssid;
@@ -515,21 +535,21 @@ void connectWiFi(){
 			Serial.print("IP: ");
 			Serial.println(WiFi.localIP());
 			lcd.setCursor(0,0);
-			lcd.print("Connesso! IP:");
+			lcd.print("Connesso! IP:      ");
 			lcd.setCursor(0,1);
 			lcd.print(WiFi.localIP());
 			log_message="Connesso a "+d_ssid;
 		}else{
 			Serial.println("Connessione a " + d_ssid +" fallita!");
 			lcd.setCursor(0,0);
-			lcd.print("Inizio AP      ");
+			lcd.print("Inizio AP        ");
 			WiFi.mode(WIFI_AP_STA);
 			WiFi.softAP("ESP32-Umiditech","12345678");
 			lcd.setCursor(0,0);
-			lcd.print("Connesso AP, IP: ");
+			lcd.print("Connesso AP, IP:          ");
 			lcd.setCursor(0,1);
 			lcd.print(WiFi.localIP());
-			Serial.println("Wifi AP iniziato: ");
+			Serial.println("Wifi AP iniziato:     ");
 			Serial.print("IP: ");
 			Serial.println(WiFi.localIP());
 			isOpenWifi=false;
