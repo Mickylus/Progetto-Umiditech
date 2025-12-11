@@ -75,9 +75,19 @@ int vol=0;
 float oldHum=0;
 // Vecchia temperatura
 float oldTemp=0;
+// Vecchio Volume
+int oldVol=0;
+// Vecchia scrittura t
+float lastTWrite=0;
+// Vecchia scrittura 
+float lastHWrite=0;
+// Calibrazione automatica volume max
+float autoMaxVol=0;
+// Calibrazione automatica volume min
+float autoMinVol=0;
 /*Funzioni*/
 
-void connectWiFi();
+int connectWiFi();
 void aggiornaDati();
 String contentType(const String &filename);
 void salvaStorico();
@@ -85,6 +95,7 @@ void caricaConfig();
 void generaStorico();
 void aggiornaLog(String);
 void setupServer();
+void calibraVol();
 
 void setup(){
 	// Inizializzo i componenti & porta seriale
@@ -99,22 +110,25 @@ void setup(){
 	lcd.print("Avvio in corso..");
 	lcd.setCursor(0,1);
 	lcd.print("Caricamento...  ");
+	delay(1000);
 	// Stabilisco se INPUT/OUTPUT
 	pinMode(POT_PIN,INPUT);
 	pinMode(BUZZ_PIN,OUTPUT);
 	pinMode(LED_PIN,OUTPUT);
 	SPI.begin(SCK_SD, MISO_SD, MOSI_SD, CS_SD);
 	if(!SD.begin(CS_SD,SPI)){
+		calibraVol();
 		Serial.println("Lettura SD fallita!");
 		lcd.setCursor(0,0);
-		lcd.print("ERRORE:         ");
+		lcd.print("Lettura SD:        ");
 		lcd.setCursor(0,1);
-		lcd.print("SD error        ");
+		lcd.print("Fallita :(      ");
 		//			    ORE			 MINUTI			  SECONDI
 		setTime(atoi(__TIME__),atoi(__TIME__+3),atoi(__TIME__+6),13,12,2025);
 		isOpenWifi=false;
 		SDfailed=true;
 	}else{
+		calibraVol();
 		setupServer();
 		start_point=millis();
 	}
@@ -151,7 +165,7 @@ void loop(){
 			float h = dht.readHumidity();
 			float t = dht.readTemperature();
 			float val=analogRead(POT_PIN);
-			vol=map(val,100,4000,0,100);
+			vol=map(val,autoMinVol,autoMaxVol,0,100);
 			if(vol<0){
 				vol=0;
 			}else if(vol>100){
@@ -202,15 +216,73 @@ void loop(){
 		}
 	}
 }
+// Calibro il volume
+void calibraVol(){
+	float PMW,totMis=0;
+	lcd.setCursor(0,0);
+	lcd.print("Calibrazione...     ");
+	lcd.setCursor(0,1);
+	lcd.print("                    ");
+	delay(1000);
+	lcd.setCursor(0,0);
+	lcd.print("Imposta il min..   ");
+	lcd.setCursor(0,1);
+	delay(1500);
+	for(int i=0;i<10;i++){
+		PMW = analogRead(POT_PIN);
+		totMis+=PMW;
+		delay(50);
+		lcd.print(".");
+	}
+	autoMinVol=totMis/10;
+	lcd.setCursor(0,0);
+	lcd.print("Valore Impostato");
+	lcd.setCursor(0,1);
+	lcd.print("Min: ");
+	lcd.print((int)autoMinVol);
+	lcd.print("        ");
+	delay(2000);
+	totMis=0;
+	lcd.setCursor(0,0);
+	lcd.print("Imposta il max..   ");
+	lcd.setCursor(0,1);
+	delay(1500);
+		for(int i=0;i<10;i++){
+		PMW = analogRead(POT_PIN);
+		totMis+=PMW;
+		delay(50);
+		lcd.print(".");
+	}
+	autoMaxVol=totMis/10;
+	lcd.setCursor(0,0);
+	lcd.print("Valore Impostato");
+	lcd.setCursor(0,1);
+	lcd.print("Max: ");
+	lcd.print((int)autoMaxVol);
+	lcd.print("        ");
+	delay(2000);
+}
 // inizializza il server
 void setupServer(){
 	if(SD.exists("/ESP32.log")){
 		SD.remove("/ESP32.log");
 	}
 	lcd.setCursor(0,0);
-	lcd.print("Lettura SD riuscita!");
+	lcd.print("Lettura SD:        ");
+	lcd.setCursor(0,1);
+	lcd.print("Riuscita!       ");
 	Serial.println("SD Aperta.");
-	connectWiFi();
+	if(connectWiFi()==1){
+		lcd.setCursor(0,0);
+		lcd.print("SD Corrotta...     ");
+		lcd.setCursor(0,1);
+		lcd.print("Formattare SD    ");
+		Serial.println("SD Corrotta!");
+		isOpenWifi=false;
+		SDfailed=true;
+		setTime(atoi(__TIME__),atoi(__TIME__+3),atoi(__TIME__+6),13,12,2025);
+		return;
+	}
 	timeClient.begin();
   	timeClient.update();
   	// Imposto l'ora di TimeLib
@@ -349,7 +421,7 @@ void salvaStorico(){
         f.close();
     }
 
-    String qty = "[" + String(g_count) + "/" + String(MAX_MEM) + "]";
+    String qty = "[" + String(g_count+1) + "/" + String(MAX_MEM) + "]";
     String message = "Salvati dati su storico " + qty;
     aggiornaLog(message);
 }
@@ -422,7 +494,7 @@ void aggiornaLog(String message){
 void aggiornaDati(){
     int val = analogRead(POT_PIN);
     Serial.println(val);
-    vol = map(val, 50, 4000, 0, 100);
+    vol = map(val, autoMinVol, autoMaxVol, 0, 100);
     float h = dht.readHumidity();
     float t = dht.readTemperature();
     Serial.print("DHT 11 | Umidità: ");
@@ -432,31 +504,34 @@ void aggiornaDati(){
     Serial.println("°");
     // Se i valori sono validi li uso, altrimenti metto 0
     if(isnan(h)){
-		hum=0;
+		hum=oldHum;
 	}else{
 		hum=h;
+		oldHum=hum;
 	}
     if(isnan(t)){
-		temp=0;
+		temp=oldTemp;
 	}else{
 		temp=t;
-	}
-	if(hum!=0){
-		oldHum = hum;
-    	oldTemp = temp;
+		oldTemp=t;
 	}
     // Limito tra 0 e 100
     vol = constrain(vol, 0, 100);
-    // ---- ArduinoJson ----
-    DynamicJsonDocument doc(256);
-    doc["umidita"] = hum;
-    doc["temperatura"] = temp;
-    doc["volume"] = vol;
-    // Serializzo il JSON
-    String json;
-    serializeJson(doc, json);
-    // Salvo nel file
-    writeFile("/dati.json", json);
+	if((temp>lastTWrite+0.20 || temp<lastTWrite-0.20) || (hum>lastHWrite+1 || hum<lastHWrite-1) || vol!=oldVol){
+		oldVol=vol;
+   		lastHWrite=hum;
+		lastTWrite=temp;
+		// ---- ArduinoJson ----
+		DynamicJsonDocument doc(256);
+		doc["umidita"] = hum;
+		doc["temperatura"] = temp;
+		doc["volume"] = vol;
+		// Serializzo il JSON
+		String json;
+		serializeJson(doc, json);
+		// Salvo nel file
+		writeFile("/dati.json", json);
+	}
 }
 // Legge le impostazioni del wifi
 bool readWifiConfig(String &ssid, String &password, String &d_ssid, String &d_password){
@@ -483,17 +558,17 @@ bool readWifiConfig(String &ssid, String &password, String &d_ssid, String &d_pa
 	return true;
 }
 // Si connette alle varie reti wifi
-void connectWiFi(){
+int connectWiFi(){
 	String ssid, password, d_ssid,d_password,log_message;
 	if(!readWifiConfig(ssid,password,d_ssid,d_password)){
 		Serial.println("Nessun WiFi configurato.");
-		return;
+		return 1;
 	}
 	lcd.setCursor(0,0);
 	lcd.print("Wifi: ");
 	lcd.print(ssid);
 	Serial.println("Connessione a: " + ssid);
-
+	delay(1000);
 	WiFi.mode(WIFI_STA);
 	WiFi.begin(ssid.c_str(), password.c_str());
 	unsigned long start = millis();
@@ -515,6 +590,7 @@ void connectWiFi(){
 		Serial.println("\nConnessione a " + ssid + " fallita!");
 		lcd.setCursor(0,0);
 		lcd.print("Connessione fallita!");
+		delay(500);
 		lcd.setCursor(0,0);
 		lcd.print("Wifi: ");
 		lcd.print(d_ssid);
@@ -523,6 +599,7 @@ void connectWiFi(){
 			isOpenWifi=false;
 		}
 		Serial.println("Provo con il WiFi di default\n");
+		delay(1000);
 		WiFi.mode(WIFI_STA);
 		WiFi.begin(d_ssid.c_str(), d_password.c_str());
 		start = millis();
@@ -543,6 +620,7 @@ void connectWiFi(){
 			Serial.println("Connessione a " + d_ssid +" fallita!");
 			lcd.setCursor(0,0);
 			lcd.print("Inizio AP        ");
+			delay(400);
 			WiFi.mode(WIFI_AP_STA);
 			WiFi.softAP("ESP32-Umiditech","12345678");
 			lcd.setCursor(0,0);
@@ -557,4 +635,5 @@ void connectWiFi(){
 		}
 	}
 	aggiornaLog(log_message);
+	return 0;
 }
