@@ -635,9 +635,5 @@ int connectWiFi(){
 		}
 	}
 	aggiornaLog(log_message);
-<<<<<<< HEAD
 	return 0;
 }
-=======
-}
->>>>>>> 8310db7d69d5080bafb54a08719be62ce20f45c7
