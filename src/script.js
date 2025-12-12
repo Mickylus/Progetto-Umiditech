@@ -5,7 +5,7 @@ async function caricaDati(){
 	try{
 		// Modificare in /dati per leggere i valori direttamente dalla RAM di ESP32
 		// Usa dati.json per visualizzare il sito con Live Server
-		const r = await fetch('/dati', { cache: "no-store" });
+		const r = await fetch('dati.json', { cache: "no-store" });
 		const d = await r.json();
 
 		const H = document.getElementById("humidity");

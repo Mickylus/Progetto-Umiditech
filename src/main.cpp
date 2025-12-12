@@ -211,7 +211,6 @@ void loop(){
 			}else{
 				salvaStorico();
 			}
-			g_count++;
 		}
 	}
 	// Scrittura LCD
@@ -472,8 +471,21 @@ void setupServer(){
 // Genera l'inizio del file storico.json
 void generaStorico(){
 	if(SD.exists("/storico.json")) {
-        SD.remove("/storico.json");
+        File f = SD.open("/storico.json", FILE_READ);
+		DynamicJsonDocument doc(2048);
+		DeserializationError err = deserializeJson(doc, f);
+		f.close();
 		yield();
+		g_count = doc["count"].as<int>();
+		if(g_count>MAX_MEM){
+			SD.remove("/storico.json");
+			g_count=1;
+			aggiornaLog("Inizializzato Storico");
+		}else{
+			salvaStorico();
+			aggiornaLog("Letto Storico");
+			return;
+		}
     }
 
     float h = dht.readHumidity();
@@ -484,6 +496,17 @@ void generaStorico(){
 		hum=h;
 		temp=t;
 	}
+	String time ="";
+	if(hour()<10){
+		time=time+"0"+String(hour())+":";
+	}else{
+		time=time+String(hour())+":";
+	}
+	if(minute()<10){
+		time=time+"0"+String(minute());
+	}else{
+		time=time+String(minute());
+	}
     DynamicJsonDocument doc(256);
     // Creo array "misurazioni"
     JsonArray misurazioni = doc.createNestedArray("misurazioni");
@@ -491,8 +514,10 @@ void generaStorico(){
     JsonObject entry = misurazioni.createNestedObject();
     entry["umidita"]     = hum;
     entry["temperatura"] = temp;
-    entry["time"]        = String(hour()) + ":" + String(minute()) + ":" + String(second());
+    entry["time"]        = time;
 	yield();
+
+	doc["count"] = g_count;
     // Scrivo JSON sulla SD
     File f = SD.open("/storico.json", FILE_WRITE);
     if(f){
@@ -500,7 +525,6 @@ void generaStorico(){
         f.close();
 		yield();
     }
-    aggiornaLog("Inizializzato Storico");
 }
 // Scrive file sulla SD
 void writeFile(const char *path, const String &data) {
@@ -523,7 +547,7 @@ void salvaStorico(){
     if (!f) return;
 	yield();
 
-    DynamicJsonDocument doc(1024);
+    DynamicJsonDocument doc(4096);
     DeserializationError err = deserializeJson(doc, f);
     f.close();
 	yield();
@@ -561,6 +585,9 @@ void salvaStorico(){
     entry["time"] = time;
 	yield();
 
+	g_count++;
+	doc["count"] = g_count;
+
     // Riscrivo tutto il JSON
     f = SD.open("/storico.json", FILE_WRITE);
     if(f){
@@ -569,7 +596,7 @@ void salvaStorico(){
 		yield();
     }
 
-    String qty = "[" + String(g_count+1) + "/" + String(MAX_MEM) + "]";
+    String qty = "[" + String(g_count) + "/" + String(MAX_MEM) + "]";
     String message = "Salvati dati su storico " + qty;
     aggiornaLog(message);
 }
