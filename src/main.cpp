@@ -473,10 +473,12 @@ void setupServer(){
 void generaStorico(){
 	if(SD.exists("/storico.json")) {
         SD.remove("/storico.json");
+		yield();
     }
 
     float h = dht.readHumidity();
     float t = dht.readTemperature();
+	yield();
 
     if(!isnan(h)){
 		hum=h;
@@ -490,11 +492,13 @@ void generaStorico(){
     entry["umidita"]     = hum;
     entry["temperatura"] = temp;
     entry["time"]        = String(hour()) + ":" + String(minute()) + ":" + String(second());
+	yield();
     // Scrivo JSON sulla SD
     File f = SD.open("/storico.json", FILE_WRITE);
     if(f){
         serializeJson(doc, f);
         f.close();
+		yield();
     }
     aggiornaLog("Inizializzato Storico");
 }
@@ -503,10 +507,12 @@ void writeFile(const char *path, const String &data) {
 	// Cancello il file
 	if(SD.exists(path)){
 		SD.remove(path);
+		yield();
 	}
 	File f = SD.open(path, FILE_WRITE);
 	f.print(data);
 	f.close();
+	yield();
 }
 // Salva i dati su storico.json per i grafici
 void salvaStorico(){
@@ -515,14 +521,17 @@ void salvaStorico(){
 	}
     File f = SD.open("/storico.json", FILE_READ);
     if (!f) return;
+	yield();
 
     DynamicJsonDocument doc(1024);
     DeserializationError err = deserializeJson(doc, f);
     f.close();
+	yield();
     if (err) return;
 
     float h = dht.readHumidity();
     float t = dht.readTemperature();
+	yield();
 
     if(!isnan(h)){
 		hum=h;
@@ -550,12 +559,14 @@ void salvaStorico(){
     entry["umidita"] = hum;
     entry["temperatura"] = temp;
     entry["time"] = time;
+	yield();
 
     // Riscrivo tutto il JSON
     f = SD.open("/storico.json", FILE_WRITE);
     if(f){
         serializeJson(doc, f);
         f.close();
+		yield();
     }
 
     String qty = "[" + String(g_count+1) + "/" + String(MAX_MEM) + "]";
@@ -571,9 +582,11 @@ void caricaConfig(){
     if(!f){
 		return;
 	}
+	yield();
     DynamicJsonDocument doc(256);
     DeserializationError err = deserializeJson(doc, f);
     f.close();
+	yield();
     if(err){
         Serial.print("Errore parsing JSON: ");
         Serial.println(err.c_str());
@@ -582,6 +595,7 @@ void caricaConfig(){
     // Lettura dei valori
     REFRESH_RATE = doc["refresh_rate"].as<int>();
     GRAPH_RATE   = doc["graph_rate"].as<int>();
+	yield();
     // Conversioni come prima
     REFRESH_RATE *= 1000;              // da secondi a millisecondi
     GRAPH_RATE *= 60000;             // da minuti a millisecondi
@@ -637,10 +651,12 @@ void aggiornaLog(String message){
 	}else{
 		log_time=log_time+String(second())+"] "; 
 	}
+	yield();
 	File Log = SD.open("/ESP32.log",FILE_APPEND);
 	String log_message = log_time+message+"\n";
 	Log.print(log_message);
 	Log.close();
+	yield();
 }
 // Aggiorna i valori salvati su dati.json
 void aggiornaDati(){
@@ -649,6 +665,7 @@ void aggiornaDati(){
     vol = map(val, autoMinVol, autoMaxVol, 0, 100);
     float h = dht.readHumidity();
     float t = dht.readTemperature();
+	yield();
     Serial.print("DHT 11 | Umidità: ");
     Serial.print(h);
     Serial.print("% - Temperatura: ");
@@ -684,7 +701,7 @@ bool readWifiConfig(String &ssid, String &password, String &d_ssid, String &d_pa
 	DynamicJsonDocument doc(256);
 	DeserializationError err = deserializeJson(doc, f);
 	f.close();
-
+	yield();
 	if(err){
 		return false;
 	}
@@ -692,6 +709,7 @@ bool readWifiConfig(String &ssid, String &password, String &d_ssid, String &d_pa
 	password = doc["password"].as<String>();
 	d_ssid = doc["d_ssid"].as<String>();
 	d_password = doc["d_password"].as<String>();
+	yield();
 	return true;
 }
 // Si connette alle varie reti wifi
@@ -715,6 +733,7 @@ int connectWiFi(){
 	unsigned long start = millis();
 	while (WiFi.status() != WL_CONNECTED && millis() - start < 10000) {
 		delay(500);
+		yield();
 		Serial.print(".");
 		lcd.print(".");
 	}
@@ -751,6 +770,7 @@ int connectWiFi(){
 		start = millis();
 		while (WiFi.status() != WL_CONNECTED && millis() - start < 10000) {
 			delay(500);
+			yield();
 			Serial.print(".");
 			lcd.print(".");
 		}
