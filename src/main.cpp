@@ -1,3 +1,56 @@
+/*
+Autori: Michele Valiati e Federico Chizzoli
+Progetto Umiditech
+
+Collegamenti:
+--------------------------------------------------------------------------
+Lettore SD:
+| Vcc		|	5V		|
+| GND		|	GND		|
+| MOSI		|	GPIO_23	|
+| MISO		|	GPIO_19	|
+| SCK		|	GPIO_18	|
+| CS		|	GPIO_5	|
+
+Sensore DHT11
+| Vcc		|	5V		|
+| DHT pin	|	GPIO_13	|
+| -			|	-		|
+| GND		|	GND		|
+
+Display LCD 16x2 I2C
+| GND		|	GND		|
+| Vcc		|	5V		|
+| SDA		|	GPIO_21	|
+| SCL		|	GPIO_22	|
+
+Componenti
+| Pot		|	GPIO_34	|
+| Buzzer	|	GPIO_14	|
+| Led		|	GPIO_15	|
+--------------------------------------------------------------------------
+
+Struttura SD
+|---------------|
+|	SD			|
+|---------------|
+| immagini
+| |- esp32icon.png
+| |- pixels.gif
+| fonts
+| | aristotelica
+| | panton
+| ESP32.log
+| favicon.ico
+| index.html
+| script.js
+| settings.html
+| settings.json
+| storico.json
+| style.css
+
+
+*/
 #include <Arduino.h>
 #include <SPI.h>
 #include <SD.h>
@@ -22,7 +75,7 @@
 #define LCD_SCL 22
 #define LCD_SDA 21
 // Pin Sensori
-#define POT_PIN 34
+#define POT_PIN 34	// 3.3V
 #define BUZZ_PIN 14
 #define DHT_PIN 13
 #define DHT_TYPE DHT11
@@ -57,6 +110,8 @@ int GRAPH_RATE = 60000;
 int g_count = 0;
 // Massima grandezza grafico
 int MAX_MEM = 288;
+// Contatore per l'errore del sensore
+int DHTError = 0;
 /* Variabili di Stato*/
 // Stabilisce se il WiFi è normale o hotspot (non ha accesso al'ora)
 bool isOpenWifi = true;
@@ -175,7 +230,9 @@ void loop(){
 			if(isnan(h)){
 				h=oldHum;
 				t=oldTemp;
+				DHTError++;
 			}else{
+				DHTError=0;
 				oldHum=h;
 				oldTemp=t;
 			}
@@ -219,8 +276,11 @@ void loop(){
 			}
 		}
 	}
-	if(!SDfailed){
-		checkSDCorrupted();
+	if(DHTError>15){
+		Serial.println("ATTENZIONE Sensore non funzionante!");
+		if(!SDfailed){
+			aggiornaLog("WARNING Sensore non funzionante!");
+		}
 	}
 }
 // Imposta l'ora manualmente
@@ -245,7 +305,7 @@ void setCompileTime(){
     // Imposta TimeLib
     setTime(hh, mm, ss, dd, mo, yy);
 }
-// Controlla se la SD è corrotta
+// Controlla se la SD è corrotta | Non usata
 void checkSDCorrupted(){
 	if(!SD.exists("/settings.json")){
 		unsigned long start_error=millis();
@@ -257,7 +317,7 @@ void checkSDCorrupted(){
 		isOpenWifi=false;
 		SDfailed=true;
 		digitalWrite(LED_PIN,HIGH);
-		while(start_error-millis()>2000){
+		while(millis()-start_error>2000){
 			analogWrite(BUZZ_PIN,255);
 			delay(50);
 			analogWrite(BUZZ_PIN,0);
@@ -269,47 +329,50 @@ void checkSDCorrupted(){
 // Calibro il volume
 void calibraVol(){
 	float PMW,totMis=0;
+	int i;
 	lcd.setCursor(0,0);
 	lcd.print("Calibrazione...     ");
 	lcd.setCursor(0,1);
 	lcd.print("                    ");
-	delay(1000);
+	delay(1500);
 	lcd.setCursor(0,0);
 	lcd.print("Imposta il min..   ");
 	lcd.setCursor(0,1);
+	lcd.print("                   ");
+	lcd.setCursor(0,1);
 	delay(1500);
-	for(int i=0;i<10;i++){
+	for(i=0;i<16;i++){
 		PMW = analogRead(POT_PIN);
 		totMis+=PMW;
 		delay(50);
 		lcd.print(".");
 	}
-	autoMinVol=totMis/10;
+	autoMinVol=totMis/16;
 	lcd.setCursor(0,0);
 	lcd.print("Valore Impostato");
 	lcd.setCursor(0,1);
 	lcd.print("Min: ");
 	lcd.print((int)autoMinVol);
-	lcd.print("        ");
+	lcd.print("              ");
 	delay(2000);
 	totMis=0;
 	lcd.setCursor(0,0);
 	lcd.print("Imposta il max..   ");
 	lcd.setCursor(0,1);
 	delay(1500);
-		for(int i=0;i<10;i++){
+	for(i=0;i<16;i++){
 		PMW = analogRead(POT_PIN);
 		totMis+=PMW;
 		delay(50);
 		lcd.print(".");
 	}
-	autoMaxVol=totMis/10;
+	autoMaxVol=totMis/16;
 	lcd.setCursor(0,0);
 	lcd.print("Valore Impostato");
 	lcd.setCursor(0,1);
 	lcd.print("Max: ");
 	lcd.print((int)autoMaxVol);
-	lcd.print("        ");
+	lcd.print("            ");
 	delay(2000);
 }
 // inizializza il server
@@ -470,13 +533,23 @@ void salvaStorico(){
 		hum=oldHum;
 		temp=oldTemp;
 	}
-
+	String time ="";
+	if(hour()<10){
+		time=time+"0"+String(hour())+":";
+	}else{
+		time=time+String(hour())+":";
+	}
+	if(minute()<10){
+		time=time+"0"+String(minute());
+	}else{
+		time=time+String(minute());
+	}
     // Aggiungo nuova misurazione
     JsonArray misurazioni = doc["misurazioni"];
     JsonObject entry = misurazioni.createNestedObject();
     entry["umidita"] = hum;
     entry["temperatura"] = temp;
-    entry["time"] = String(hour()) + ":" + String(minute()) + ":" + String(second());
+    entry["time"] = time;
 
     // Riscrivo tutto il JSON
     f = SD.open("/storico.json", FILE_WRITE);
@@ -548,7 +621,22 @@ String contentType(const String &filename){
 }
 // Aggiorna il log
 void aggiornaLog(String message){
-	String log_time="["+String(day())+"/"+String(month())+"/"+String(year())+"-"+String(hour())+":"+String(minute())+":"+String(second())+"] ";
+	String log_time="["+String(day())+"/"+String(month())+"/"+String(year())+"-";
+	if(hour()<10){
+		log_time=log_time+"0"+String(hour())+":";
+	}else{
+		log_time=log_time+String(hour())+":";
+	}
+	if(minute()<10){
+		log_time=log_time+"0"+String(minute())+":";
+	}else{
+		log_time=log_time+String(minute())+":";
+	}
+	if(second()<10){
+		log_time=log_time+"0"+String(second())+"] ";
+	}else{
+		log_time=log_time+String(second())+"] "; 
+	}
 	File Log = SD.open("/ESP32.log",FILE_APPEND);
 	String log_message = log_time+message+"\n";
 	Log.print(log_message);
@@ -616,14 +704,19 @@ int connectWiFi(){
 	lcd.setCursor(0,0);
 	lcd.print("Wifi: ");
 	lcd.print(ssid);
+	lcd.print("     ");
 	Serial.println("Connessione a: " + ssid);
+	lcd.setCursor(0,1);
+	lcd.print("                   ");
 	delay(1000);
 	WiFi.mode(WIFI_STA);
 	WiFi.begin(ssid.c_str(), password.c_str());
+	lcd.setCursor(0,1);
 	unsigned long start = millis();
 	while (WiFi.status() != WL_CONNECTED && millis() - start < 10000) {
 		delay(500);
 		Serial.print(".");
+		lcd.print(".");
 	}
 	if(WiFi.status() == WL_CONNECTED) {
 		Serial.println("\nConnesso!");
@@ -633,6 +726,7 @@ int connectWiFi(){
 		lcd.print("Connesso! IP:      ");
 		lcd.setCursor(0,1);
 		lcd.print(WiFi.localIP());
+		lcd.print("    ");
 		log_message="Connesso a "+ssid;
 	}else{
 		// Riprovo con il wifi di default
@@ -644,6 +738,9 @@ int connectWiFi(){
 		lcd.print("Wifi: ");
 		lcd.print(d_ssid);
 		lcd.print("    ");
+		lcd.setCursor(0,1);
+		lcd.print("                 ");
+		lcd.setCursor(0,1);
 		if(d_ssid=="PC-Mighes"){
 			isOpenWifi=false;
 		}
@@ -655,6 +752,7 @@ int connectWiFi(){
 		while (WiFi.status() != WL_CONNECTED && millis() - start < 10000) {
 			delay(500);
 			Serial.print(".");
+			lcd.print(".");
 		}
 		if(WiFi.status() == WL_CONNECTED) {
 			Serial.println("\nConnesso!");
@@ -664,6 +762,7 @@ int connectWiFi(){
 			lcd.print("Connesso! IP:      ");
 			lcd.setCursor(0,1);
 			lcd.print(WiFi.localIP());
+			lcd.print("     ");
 			log_message="Connesso a "+d_ssid;
 		}else{
 			Serial.println("Connessione a " + d_ssid +" fallita!");
