@@ -96,6 +96,8 @@ void generaStorico();
 void aggiornaLog(String);
 void setupServer();
 void calibraVol();
+void checkSDCorrupted();
+void setCompileTime();
 
 void setup(){
 	// Inizializzo i componenti & porta seriale
@@ -123,8 +125,7 @@ void setup(){
 		lcd.print("Lettura SD:        ");
 		lcd.setCursor(0,1);
 		lcd.print("Fallita :(      ");
-		//			    ORE			 MINUTI			  SECONDI
-		setTime(atoi(__TIME__),atoi(__TIME__+3),atoi(__TIME__+6),13,12,2025);
+		setCompileTime();
 		isOpenWifi=false;
 		SDfailed=true;
 	}else{
@@ -172,8 +173,11 @@ void loop(){
 				vol=100;
 			}
 			if(isnan(h)){
-				h=0;
-				t=0;
+				h=oldHum;
+				t=oldTemp;
+			}else{
+				oldHum=h;
+				oldTemp=t;
 			}
 			if(h>65){
 				lcd.setCursor(0,0);
@@ -214,6 +218,52 @@ void loop(){
 				analogWrite(BUZZ_PIN,map(vol,0,100,0,255));
 			}
 		}
+	}
+	if(!SDfailed){
+		checkSDCorrupted();
+	}
+}
+// Imposta l'ora manualmente
+void setCompileTime(){
+    int hh, mm, ss;
+    int dd, mo, yy;
+
+    // __DATE__ = "Dec 13 2025"
+    // __TIME__ = "12:34:56"
+
+    // Legge l'ora
+    sscanf(__TIME__, "%d:%d:%d", &hh, &mm, &ss);
+
+    // Legge la data
+    char monthStr[4];
+    sscanf(__DATE__, "%s %d %d", monthStr, &dd, &yy);
+
+    // Converte il mese
+    const char* months = "JanFebMarAprMayJunJulAugSepOctNovDec";
+    mo = (strstr(months, monthStr) - months) / 3 + 1;
+
+    // Imposta TimeLib
+    setTime(hh, mm, ss, dd, mo, yy);
+}
+// Controlla se la SD è corrotta
+void checkSDCorrupted(){
+	if(!SD.exists("/settings.json")){
+		unsigned long start_error=millis();
+		lcd.setCursor(0,0);
+		lcd.print("SD Corrotta...     ");
+		lcd.setCursor(0,1);
+		lcd.print("Formattare SD    ");
+		Serial.println("SD Corrotta!");
+		isOpenWifi=false;
+		SDfailed=true;
+		digitalWrite(LED_PIN,HIGH);
+		while(start_error-millis()>2000){
+			analogWrite(BUZZ_PIN,255);
+			delay(50);
+			analogWrite(BUZZ_PIN,0);
+			delay(50);
+		}
+		digitalWrite(LED_PIN,LOW);
 	}
 }
 // Calibro il volume
@@ -280,7 +330,7 @@ void setupServer(){
 		Serial.println("SD Corrotta!");
 		isOpenWifi=false;
 		SDfailed=true;
-		setTime(atoi(__TIME__),atoi(__TIME__+3),atoi(__TIME__+6),13,12,2025);
+		setCompileTime();
 		return;
 	}
 	timeClient.begin();
@@ -289,7 +339,7 @@ void setupServer(){
 	if(isOpenWifi){
   		setTime(timeClient.getEpochTime());
 	}else{
-		setTime(atoi(__TIME__),atoi(__TIME__+3),atoi(__TIME__+6),13,12,2025); // ore:minuti:secondi, giorno:mese:anno)
+		setCompileTime();
 	}
 	// Creo il file log
 	File LOG = SD.open("/ESP32.log",FILE_WRITE);
@@ -305,8 +355,22 @@ void setupServer(){
 			request->send(404, "application/json", "{}");
 		}
 	});
+	server.on("/dati", HTTP_GET, [](AsyncWebServerRequest *request){
+		DynamicJsonDocument doc(256);
+		doc["umidita"] = hum;
+		doc["temperatura"] = temp;
+		doc["volume"] = vol;
+
+		String json;
+		serializeJson(doc, json);
+
+		request->send(200, "application/json", json);
+	});
 	// POST per scrivere settings.json
 	server.on("/settings.json", HTTP_POST, [](AsyncWebServerRequest *request){},NULL,[](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
+		if(SD.exists("/settings.json")){
+			SD.remove("/settings.json");
+		}
 		File f = SD.open("/settings.json", FILE_WRITE);
 		if(f){
 			f.write(data, len);
@@ -517,21 +581,6 @@ void aggiornaDati(){
 	}
     // Limito tra 0 e 100
     vol = constrain(vol, 0, 100);
-	if((temp>lastTWrite+0.20 || temp<lastTWrite-0.20) || (hum>lastHWrite+1 || hum<lastHWrite-1) || vol!=oldVol){
-		oldVol=vol;
-   		lastHWrite=hum;
-		lastTWrite=temp;
-		// ---- ArduinoJson ----
-		DynamicJsonDocument doc(256);
-		doc["umidita"] = hum;
-		doc["temperatura"] = temp;
-		doc["volume"] = vol;
-		// Serializzo il JSON
-		String json;
-		serializeJson(doc, json);
-		// Salvo nel file
-		writeFile("/dati.json", json);
-	}
 }
 // Legge le impostazioni del wifi
 bool readWifiConfig(String &ssid, String &password, String &d_ssid, String &d_password){

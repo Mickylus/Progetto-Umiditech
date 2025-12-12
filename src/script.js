@@ -42,6 +42,7 @@ async function caricaImpostazioni(){
 		document.getElementById("password").value = w.password;
 		document.getElementById("r_rate").value =w.refresh_rate;
 		document.getElementById("graph_rate").value=w.graph_rate;
+		REFRESH_RATE=Number(w.refresh_rate)*1000;
 	}catch(_){}
 }
 async function salvaWifi(e){
@@ -54,7 +55,7 @@ async function salvaWifi(e){
 	const graph_rate = Number(document.getElementById("graph_rate").value || "1");
 	const cb = document.getElementById("setDefaultWifi");
 	
-	const r = await fetch("settings.json");
+	const r = await fetch('settings.json',{cache : 'no-store'});
 	settings = await r.json();
 	
 	settings.ssid = ssid;
@@ -64,6 +65,7 @@ async function salvaWifi(e){
 		settings.d_password = password;
 	}
 	settings.refresh_rate = refresh_rate;
+	REFRESH_RATE = refresh_rate*1000;
 	settings.graph_rate = graph_rate;
 	const st = document.getElementById("saveStatus");
 	if(st) st.textContent = "Salvataggio...";
