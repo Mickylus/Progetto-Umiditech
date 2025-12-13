@@ -31,26 +31,28 @@ Componenti
 --------------------------------------------------------------------------
 
 Struttura SD
-|---------------|
-|	SD			|
-|---------------|
-| immagini
-| |- esp32icon.png
-| |- pixels.gif
-| fonts
-| | aristotelica
-| | panton
-| ESP32.log
-| favicon.ico
-| index.html
-| script.js
-| settings.html
-| settings.json
-| storico.json
-| style.css
+|-------------------|
+|	SD				|
+|-------------------|
+| immagini			|
+| |- esp32icon.png	|
+| |- pixels.gif		|
+| fonts				|
+| | aristotelica	|
+| | panton			|
+| ESP32.log			|
+| favicon.ico		|
+| index.html		|
+| script.js			|
+| settings.html		|
+| settings.json		|
+| storico.json		|
+| style.css			|
+|-------------------|
 
 
 */
+// Librerie
 #include <Arduino.h>
 #include <SPI.h>
 #include <SD.h>
@@ -119,6 +121,8 @@ bool isOpenWifi = true;
 bool BuzzActivated = false;
 // Stabilisce se il lettore SD funziona correttamente
 bool SDfailed = false;
+// Stabilisce se ha già stampato il messaggio id warning
+bool warningMessage = false;
 /*Variabili sensori*/
 // Umidità (DHT 11)
 float hum=0;
@@ -172,6 +176,13 @@ void setup(){
 	pinMode(POT_PIN,INPUT);
 	pinMode(BUZZ_PIN,OUTPUT);
 	pinMode(LED_PIN,OUTPUT);
+	analogWrite(BUZZ_PIN,255);
+	delay(300);
+	analogWrite(BUZZ_PIN,0);
+	delay(200);
+	analogWrite(BUZZ_PIN,255);
+	delay(300);
+	analogWrite(BUZZ_PIN,0);
 	SPI.begin(SCK_SD, MISO_SD, MOSI_SD, CS_SD);
 	if(!SD.begin(CS_SD,SPI)){
 		calibraVol();
@@ -232,6 +243,7 @@ void loop(){
 				DHTError++;
 			}else{
 				DHTError=0;
+				warningMessage=false;
 				oldHum=h;
 				oldTemp=t;
 			}
@@ -276,9 +288,12 @@ void loop(){
 		}
 	}
 	if(DHTError>15){
-		Serial.println("ATTENZIONE Sensore non funzionante!");
-		if(!SDfailed){
-			aggiornaLog("WARNING Sensore non funzionante!");
+		if(!warningMessage){
+			Serial.println("ATTENZIONE Sensore non funzionante!");
+			if(!SDfailed){
+				aggiornaLog("WARNING Sensore non funzionante!");
+			}
+			warningMessage=true;
 		}
 	}
 }
@@ -372,6 +387,10 @@ void calibraVol(){
 	lcd.print("Max: ");
 	lcd.print((int)autoMaxVol);
 	lcd.print("            ");
+	if(autoMinVol==autoMaxVol){
+		autoMinVol=0;
+		autoMaxVol=4095;
+	}
 	delay(2000);
 }
 // inizializza il server
@@ -779,6 +798,8 @@ int connectWiFi(){
 		Serial.println("\nConnessione a " + ssid + " fallita!");
 		lcd.setCursor(0,0);
 		lcd.print("Connessione fallita!");
+		lcd.setCursor(0,1);
+		lcd.print("                       ");
 		delay(500);
 		lcd.setCursor(0,0);
 		lcd.print("Wifi: ");
@@ -821,10 +842,10 @@ int connectWiFi(){
 			lcd.setCursor(0,0);
 			lcd.print("Connesso AP, IP:          ");
 			lcd.setCursor(0,1);
-			lcd.print(WiFi.localIP());
+			lcd.print(WiFi.softAPIP());
 			Serial.println("Wifi AP iniziato:     ");
 			Serial.print("IP: ");
-			Serial.println(WiFi.localIP());
+			Serial.println(WiFi.softAPIP());
 			isOpenWifi=false;
 			log_message="Access point inizializzato!";
 		}
