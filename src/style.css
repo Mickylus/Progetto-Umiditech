@@ -235,15 +235,23 @@ span.note:hover{
     color: white;
 }
 .verde {
-	background-color: rgba(0, 128, 0, 0.441);
+	background-color: rgba(83, 193, 175, 0.441);
 }
 .giallo {
-	background-color: rgba(255, 217, 0, 0.479);
+	background-color: rgba(174, 255, 0, 0.479);
 }
 .rosso {
 	background-color: rgba(255, 0, 0, 0.413);
 }
-
+#barra1 .verde{
+	background-color: rgba(255, 166, 0, 0.596);
+}
+#barra1 .giallo{
+	background-color: rgba(172, 255, 47, 0.566);
+}
+#barra1 .rosso{
+	background-color: rgb(129, 129, 198);
+}
 .freccia {
     position: absolute;
     top: 1px;

@@ -89,8 +89,8 @@ LiquidCrystal_I2C lcd(0x27,16,2);
 DHT dht(DHT_PIN,DHT_TYPE);
 
 // NTP
-WiFiUDP ntpUDP;
-NTPClient timeClient(ntpUDP, "pool.ntp.org", 3600*1); // offset in secondi (qui +1 ora)
+//WiFiUDP ntpUDP;
+//NTPClient timeClient(ntpUDP, "pool.ntp.org", 3600*1); // offset in secondi (qui +1 ora)
 
 /*Variabili di tempo*/
 // Ultima scrittura dati
@@ -101,6 +101,8 @@ unsigned long lastLcd = 0;
 unsigned long lastStoricoWrite = 0;
 // Tempo di inizio del suono del buzzer
 unsigned long buzz_start = 0;
+// Ultima impostazione manuale dell'ora
+unsigned long lastTime=0;
 /*Variabili contatori*/
 // Segna l'inizio ufficiale del programma (fuori dal setup)
 int start_point = 0;
@@ -123,6 +125,8 @@ bool BuzzActivated = false;
 bool SDfailed = false;
 // Stabilisce se ha già stampato il messaggio id warning
 bool warningMessage = false;
+// Stabilisce se l'orario va impostato manualmente
+bool manualTime = false;
 /*Variabili sensori*/
 // Umidità (DHT 11)
 float hum=0;
@@ -144,6 +148,14 @@ float lastHWrite=0;
 float autoMaxVol=0;
 // Calibrazione automatica volume min
 float autoMinVol=0;
+// Variabili per l'ora
+int manualHour = 12;
+int manualMinute = 35;
+int manualSecond = 0;
+
+int manualDay = 13;
+int manualMonth = 12;
+int manualYear = 2025;
 /*Funzioni*/
 
 int connectWiFi();
@@ -162,6 +174,7 @@ void setup(){
 	// Inizializzo i componenti & porta seriale
 	Serial.begin(115200);
 	Wire.begin(LCD_SDA,LCD_SCL);
+	setCompileTime();
 	lcd.init();
 	lcd.backlight();
 	dht.begin();
@@ -177,12 +190,16 @@ void setup(){
 	pinMode(BUZZ_PIN,OUTPUT);
 	pinMode(LED_PIN,OUTPUT);
 	analogWrite(BUZZ_PIN,255);
+	digitalWrite(LED_PIN,HIGH);
 	delay(300);
 	analogWrite(BUZZ_PIN,0);
+	digitalWrite(LED_PIN,LOW);
 	delay(200);
 	analogWrite(BUZZ_PIN,255);
+	digitalWrite(LED_PIN,HIGH);
 	delay(300);
 	analogWrite(BUZZ_PIN,0);
+	digitalWrite(LED_PIN,LOW);
 	SPI.begin(SCK_SD, MISO_SD, MOSI_SD, CS_SD);
 	if(!SD.begin(CS_SD,SPI)){
 		calibraVol();
@@ -203,6 +220,26 @@ void setup(){
 
 void loop(){
 	// Scrittura dati server
+	if(manualTime){
+		if(millis()- lastTime >= 1000) { // aggiorna ogni secondo
+			lastTime = millis();
+
+			manualSecond++;
+			if(manualSecond >= 60) {
+				manualSecond = 0;
+				manualMinute++;
+			}
+			if(manualMinute >= 60) {
+				manualMinute = 0;
+				manualHour++;
+			}
+			if(manualHour >= 24) {
+				manualHour = 0;
+				manualDay++;
+				// qui puoi aggiungere gestione mesi/anno
+			}
+		}
+	}	
 	if(!SDfailed){
 		// Aggiorno i dati ogni 2 secondi se sono cambiati per evitare l'usura della microSD
 		if (millis() - lastWrite >= REFRESH_RATE) {
@@ -211,9 +248,9 @@ void loop(){
 		}
 		if(millis()-lastStoricoWrite >= GRAPH_RATE){
 			if(isOpenWifi){
-				if(timeClient.update()){
-					setTime(timeClient.getEpochTime());
-				}
+				//if(timeClient.update()){
+				//	setTime(timeClient.getEpochTime());
+				//}
 			}
 			lastStoricoWrite=millis();
 			if(g_count>=MAX_MEM){
@@ -230,6 +267,7 @@ void loop(){
 			lastLcd=millis();
 			float h = dht.readHumidity();
 			float t = dht.readTemperature();
+			yield();
 			float val=analogRead(POT_PIN);
 			vol=map(val,autoMinVol,autoMaxVol,0,100);
 			if(vol<0){
@@ -255,7 +293,7 @@ void loop(){
 				lcd.print((int)h);
 				lcd.print("% T: ");
 				lcd.print(t);
-				lcd.print("°");
+				lcd.print("C");
 				if(!BuzzActivated){
 					BuzzActivated=true;
 					buzz_start=millis();
@@ -278,7 +316,7 @@ void loop(){
 				lcd.print((int)h);
 				lcd.print("% T: ");
 				lcd.print(t);
-				lcd.print("°");
+				lcd.print("C");
 			}
 			if(millis()-buzz_start >= 3500){
 				analogWrite(BUZZ_PIN,0);
@@ -296,28 +334,11 @@ void loop(){
 			warningMessage=true;
 		}
 	}
+
 }
 // Imposta l'ora manualmente
 void setCompileTime(){
-    int hh, mm, ss;
-    int dd, mo, yy;
-
-    // __DATE__ = "Dec 13 2025"
-    // __TIME__ = "12:34:56"
-
-    // Legge l'ora
-    sscanf(__TIME__, "%d:%d:%d", &hh, &mm, &ss);
-
-    // Legge la data
-    char monthStr[4];
-    sscanf(__DATE__, "%s %d %d", monthStr, &dd, &yy);
-
-    // Converte il mese
-    const char* months = "JanFebMarAprMayJunJulAugSepOctNovDec";
-    mo = (strstr(months, monthStr) - months) / 3 + 1;
-
-    // Imposta TimeLib
-    setTime(hh, mm, ss, dd, mo, yy);
+	setTime(15, 44, 50, 13, 12, 2025);
 }
 // Controlla se la SD è corrotta | Non usata
 void checkSDCorrupted(){
@@ -414,20 +435,19 @@ void setupServer(){
 		setCompileTime();
 		return;
 	}
-	timeClient.begin();
-  	timeClient.update();
+//	timeClient.begin();
+ // timeClient.update();
   	// Imposto l'ora di TimeLib
 	if(isOpenWifi){
-  		setTime(timeClient.getEpochTime());
+  //		setTime(timeClient.getEpochTime());
 	}else{
 		setCompileTime();
 	}
 	// Creo il file log
 	File LOG = SD.open("/ESP32.log",FILE_WRITE);
-	String log_time="["+String(day())+"/"+String(month())+"/"+String(year())+"-"+String(hour())+":"+String(minute())+":"+String(second())+"] ";
-	String log_message=log_time+"Avviato ESP32 - Umiditech\n"+log_time+"Inizializzata SD\n";
-	LOG.print(log_message);
 	LOG.close();
+	aggiornaLog("Avviato ESP32");
+	aggiornaLog("Inizializzata SD");
 	// GET per leggere settings.json
 	server.on("/settings.json", HTTP_GET, [](AsyncWebServerRequest *request){
 		if(SD.exists("/settings.json")){
