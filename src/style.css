@@ -88,13 +88,14 @@ div.val_box{
 	border-radius: 15px;
 	box-shadow: 0 4px 15px rgba(1, 1, 39, 0.08);
 	width: 30rem;
-	height: 8rem;
+	height: 9rem;
 	display: block;
 	flex-direction: column;
 	align-items: center;
 	justify-content: center;
 	text-align: center;
 	font-size: 1.3rem;
+	padding-bottom: 43px;
 }
 div.val_box:hover{
 	box-shadow: 0 4px 15px rgba(120, 189, 201, 0.963);
@@ -217,6 +218,41 @@ span.note:hover{
 	border-radius: 4rem;
 	box-shadow: 0.1rem 0.2rem rgb(90, 28, 28);
 }
+#barra1,#barra2{
+    position: relative;
+    width: auto;
+    height: 3px;
+    display: flex;
+}
+#barra1:hover,#barra2:hover{
+	height: 4px;
+}
+.zona {
+    flex: 1;
+    text-align: center;
+    line-height: 30px;
+    font-weight: bold;
+    color: white;
+}
+.verde {
+	background-color: rgba(0, 128, 0, 0.441);
+}
+.giallo {
+	background-color: rgba(255, 217, 0, 0.479);
+}
+.rosso {
+	background-color: rgba(255, 0, 0, 0.413);
+}
+
+.freccia {
+    position: absolute;
+    top: 1px;
+    width: auto;
+    height: auto;
+    border-left: 3px solid transparent;
+    border-right: 3px solid transparent;
+    border-bottom: 7px solid rgb(55, 55, 59);
+    transition: left 0.3s; /* animazione fluida */}
 hr.fine-pagina{
 	margin-top: 10rem;
 }

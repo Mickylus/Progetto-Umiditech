@@ -1,6 +1,5 @@
 let REFRESH_RATE = 200; // valore di default in millisecondi
 let charts = {};
-
 async function caricaDati(){
 	try{
 		// Modificare in /dati per leggere i valori direttamente dalla RAM di ESP32
@@ -17,6 +16,9 @@ async function caricaDati(){
 		if(V) V.textContent = d.volume ?? "";
 
 		aggiornaKnob(Number(d.volume || 0));
+		aggiornaFreccia("freccia1", Number(d.umidita || 0),100); // umidità max 100%
+		aggiornaFreccia("freccia2", Number(d.temperatura || 0),55); // temperatura max 50°C
+
 
 		const Readstorico = await fetch('storico.json',{cache: 'no-store'});
 		const storico = await Readstorico.json();
@@ -35,6 +37,15 @@ async function caricaDati(){
 		console.error("Errore lettura dati:", e);
 	}
 }
+function aggiornaFreccia(frecciaId, valore, max = 100){
+    const freccia = document.getElementById(frecciaId);
+    if(!freccia) return;
+    const barra = freccia.parentElement;
+    const barreWidth = barra.clientWidth;
+    const pos = Math.min(Math.max((valore / max) * barreWidth, 0), barreWidth);
+    freccia.style.left = `${pos - freccia.offsetWidth/2}px`; // centro freccia
+}
+
 // ---- WIFI ----
 async function caricaImpostazioni(){
 	try{
