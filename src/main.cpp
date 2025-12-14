@@ -89,8 +89,8 @@ LiquidCrystal_I2C lcd(0x27,16,2);
 DHT dht(DHT_PIN,DHT_TYPE);
 
 // NTP
-//WiFiUDP ntpUDP;
-//NTPClient timeClient(ntpUDP, "pool.ntp.org", 3600*1); // offset in secondi (qui +1 ora)
+WiFiUDP ntpUDP;
+NTPClient timeClient(ntpUDP, "pool.ntp.org", 3600*1); // offset in secondi (qui +1 ora)
 
 /*Variabili di tempo*/
 // Ultima scrittura dati
@@ -125,8 +125,6 @@ bool BuzzActivated = false;
 bool SDfailed = false;
 // Stabilisce se ha già stampato il messaggio id warning
 bool warningMessage = false;
-// Stabilisce se l'orario va impostato manualmente
-bool manualTime = false;
 /*Variabili sensori*/
 // Umidità (DHT 11)
 float hum=0;
@@ -148,14 +146,6 @@ float lastHWrite=0;
 float autoMaxVol=0;
 // Calibrazione automatica volume min
 float autoMinVol=0;
-// Variabili per l'ora
-int manualHour = 12;
-int manualMinute = 35;
-int manualSecond = 0;
-
-int manualDay = 13;
-int manualMonth = 12;
-int manualYear = 2025;
 /*Funzioni*/
 
 int connectWiFi();
@@ -219,27 +209,7 @@ void setup(){
 }
 
 void loop(){
-	// Scrittura dati server
-	if(manualTime){
-		if(millis()- lastTime >= 1000) { // aggiorna ogni secondo
-			lastTime = millis();
-
-			manualSecond++;
-			if(manualSecond >= 60) {
-				manualSecond = 0;
-				manualMinute++;
-			}
-			if(manualMinute >= 60) {
-				manualMinute = 0;
-				manualHour++;
-			}
-			if(manualHour >= 24) {
-				manualHour = 0;
-				manualDay++;
-				// qui puoi aggiungere gestione mesi/anno
-			}
-		}
-	}	
+	// Scrittura dati server	
 	if(!SDfailed){
 		// Aggiorno i dati ogni 2 secondi se sono cambiati per evitare l'usura della microSD
 		if (millis() - lastWrite >= REFRESH_RATE) {
@@ -248,9 +218,9 @@ void loop(){
 		}
 		if(millis()-lastStoricoWrite >= GRAPH_RATE){
 			if(isOpenWifi){
-				//if(timeClient.update()){
-				//	setTime(timeClient.getEpochTime());
-				//}
+				if(timeClient.update()){
+					setTime(timeClient.getEpochTime());
+				}
 			}
 			lastStoricoWrite=millis();
 			if(g_count>=MAX_MEM){
@@ -435,11 +405,11 @@ void setupServer(){
 		setCompileTime();
 		return;
 	}
-//	timeClient.begin();
- // timeClient.update();
+	timeClient.begin();
+ 	timeClient.update();
   	// Imposto l'ora di TimeLib
 	if(isOpenWifi){
-  //		setTime(timeClient.getEpochTime());
+  		setTime(timeClient.getEpochTime());
 	}else{
 		setCompileTime();
 	}
